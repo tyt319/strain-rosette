@@ -1,0 +1,17 @@
+# Keil 编译输出
+OBJ/
+Objects/
+Listings/
+Output/
+*.o
+*.obj
+*.lst
+*.hex
+*.bin
+*.axf
+
+# Keil 用户选项文件（本地路径、窗口布局等）
+*.uvoptx
+*.uvguix.*
+*.uvgui_*
+*.scvd

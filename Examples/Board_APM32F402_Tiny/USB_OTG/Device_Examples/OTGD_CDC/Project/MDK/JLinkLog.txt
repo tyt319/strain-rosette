@@ -1,0 +1,170 @@
+T748C 000:181.579   SEGGER J-Link V9.30a Log File
+T748C 000:181.671   DLL Compiled: Mar 30 2026 10:51:58
+T748C 000:181.675   Logging started @ 2026-04-01 07:11
+T748C 000:181.679   Process: E:\study\keil5\UV4\UV4.exe
+T748C 000:181.687 - 181.682ms 
+T748C 000:181.694 JLINK_SetWarnOutHandler(...)
+T748C 000:181.700 - 0.006ms 
+T748C 000:181.705 JLINK_OpenEx(...)
+T748C 000:186.208   Firmware: J-Link V9 compiled May  7 2021 16:26:12
+T748C 000:187.932   Firmware: J-Link V9 compiled May  7 2021 16:26:12
+T748C 000:188.039   Decompressing FW timestamp took 95 us
+T748C 000:198.210   Hardware: V9.40
+T748C 000:198.223   S/N: 69409503
+T748C 000:198.228   OEM: SEGGER
+T748C 000:198.233   Feature(s): RDI, GDB, FlashDL, FlashBP, JFlash
+T748C 000:199.636   Bootloader: (FW returned invalid version)
+T748C 000:201.035   TELNET listener socket opened on port 19021
+T748C 000:201.099   WEBSRV WEBSRV_Init(): Starting webserver thread(s)
+T748C 000:201.257   WEBSRV Webserver running on local port 19080
+T748C 000:201.343   Looking for J-Link GUI Server exe at: E:\study\keil5\ARM\Segger\JLinkGUIServer.exe
+T748C 000:201.444   Looking for J-Link GUI Server exe at: C:\Program Files\SEGGER\JLink_V930a\JLinkGUIServer.exe
+T748C 000:201.478   Forking J-Link GUI Server: C:\Program Files\SEGGER\JLink_V930a\JLinkGUIServer.exe
+T748C 000:203.700   J-Link GUI Server info: "J-Link GUI server V9.30a "
+T748C 000:203.921 - 22.211ms returns "O.K."
+T748C 000:203.938 JLINK_GetEmuCaps()
+T748C 000:203.944 - 0.004ms returns 0xB9FF7BBF
+T748C 000:203.952 JLINK_TIF_GetAvailable(...)
+T748C 000:204.404 - 0.451ms 
+T748C 000:204.415 JLINK_SetErrorOutHandler(...)
+T748C 000:204.419 - 0.003ms 
+T748C 000:204.438 JLINK_ExecCommand("ProjectFile = "E:\study\实验室\项目\应变花硬件\keilprj\APM32F4xx_DAL_SDK_V1.2.0\Examples\Board_APM32F402_Tiny\USB_OTG\Device_Examples\OTGD_CDC\Project\MDK\JLinkSettings.ini"", ...). 
+T748C 000:215.824   Ref file found at: E:\study\keil5\ARM\Segger\JLinkDevices.ref
+T748C 000:215.923   REF file references invalid XML file: C:\Program Files\SEGGER\JLink_V930a\JLinkDevices.xml
+T748C 000:216.956 - 12.518ms returns 0x00
+T748C 000:216.976 JLINK_ExecCommand("Device = APM32F402RB", ...). 
+T748C 000:217.026   Flash bank @ 0x08000000: SFL: Parsing sectorization info from ELF file
+T748C 000:217.032     FlashDevice.SectorInfo[0]: .SectorSize = 0x00000400, .SectorStartAddr = 0x00000000
+T748C 000:217.038   FlashBank @0x08000000: Sectorization info from SFL ELF file ignored because sectorization override from DLL / XML file is active.
+T748C 000:217.079   Flash bank @ 0x1FFFC000: SFL: Parsing sectorization info from ELF file
+T748C 000:217.084     FlashDevice.SectorInfo[0]: .SectorSize = 0x00000010, .SectorStartAddr = 0x00000000
+T748C 000:217.100   Device "APM32F402RB" selected.
+T748C 000:217.300 - 0.323ms returns 0x00
+T748C 000:217.315   ERROR: Unknown command
+T748C 000:217.323 JLINK_GetHardwareVersion()
+T748C 000:217.327 - 0.005ms returns 94000
+T748C 000:217.332 JLINK_GetDLLVersion()
+T748C 000:217.335 - 0.003ms returns 93001
+T748C 000:217.341 JLINK_GetOEMString(...)
+T748C 000:217.346 JLINK_GetFirmwareString(...)
+T748C 000:217.350 - 0.003ms 
+T748C 000:217.356 JLINK_GetDLLVersion()
+T748C 000:217.359 - 0.003ms returns 93001
+T748C 000:217.363 JLINK_GetCompileDateTime()
+T748C 000:217.367 - 0.003ms 
+T748C 000:217.372 JLINK_GetFirmwareString(...)
+T748C 000:217.375 - 0.003ms 
+T748C 000:217.380 JLINK_GetHardwareVersion()
+T748C 000:217.383 - 0.003ms returns 94000
+T748C 000:217.388 JLINK_GetSN()
+T748C 000:217.392 - 0.003ms returns 69409503
+T748C 000:217.396 JLINK_GetOEMString(...)
+T748C 000:217.403 JLINK_TIF_Select(JLINKARM_TIF_SWD)
+T748C 000:219.163 - 1.759ms returns 0x00
+T748C 000:219.174 JLINK_HasError()
+T748C 000:219.184 JLINK_SetSpeed(5000)
+T748C 000:219.494 - 0.311ms 
+T748C 000:219.720 JLINK_HasError()
+T748C 000:219.728 JLINK_SetResetType(JLINKARM_RESET_TYPE_NORMAL)
+T748C 000:219.732 - 0.004ms returns JLINKARM_RESET_TYPE_NORMAL
+T748C 000:219.741 JLINK_Reset()
+T748C 000:220.301   InitTarget() start
+T748C 000:220.307    J-Link Script File: Executing InitTarget()
+T748C 000:306.121   Check if Flash is read protected.
+T748C 000:311.780   
+Flash is read protected.
+T748C 000:311.885   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 000:311.892   Executing default behavior previously saved in the registry.
+T748C 000:311.899   Device will be unsecured now.
+T748C 000:311.907   Read protection disabled.
+T748C 060:222.028   
+  ***** Error: 
+T748C 060:222.056   J-Link script file function InitTarget() returned with error code -1
+T748C 060:222.072   InitTarget() end - Took 60.0s
+T748C 060:222.092   Connect failed. Resetting via Reset pin and trying again.
+T748C 060:294.932   InitTarget() start
+T748C 060:295.008    J-Link Script File: Executing InitTarget()
+T748C 060:381.984   Check if Flash is read protected.
+T748C 060:387.800   
+Flash is read protected.
+T748C 060:388.096   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 060:388.108   Executing default behavior previously saved in the registry.
+T748C 060:388.128   Device will be unsecured now.
+T748C 060:388.152   Read protection disabled.
+T748C 120:295.440   
+  ***** Error: 
+T748C 120:295.488   J-Link script file function InitTarget() returned with error code -1
+T748C 120:295.528   InitTarget() end - Took 60.0s
+T748C 120:295.552 - 120075.800ms 
+T748C 120:295.592 JLINK_GetId()
+T748C 120:295.976   InitTarget() start
+T748C 120:296.000    J-Link Script File: Executing InitTarget()
+T748C 120:381.232   Check if Flash is read protected.
+T748C 120:386.904   
+Flash is read protected.
+T748C 120:387.224   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 120:387.248   Executing default behavior previously saved in the registry.
+T748C 120:387.280   Device will be unsecured now.
+T748C 120:387.304   Read protection disabled.
+T748C 180:297.552   
+  ***** Error: 
+T748C 180:297.616   J-Link script file function InitTarget() returned with error code -1
+T748C 180:297.680   InitTarget() end - Took 60.0s
+T748C 180:297.696   Connect failed. Resetting via Reset pin and trying again.
+T748C 180:376.992   InitTarget() start
+T748C 180:377.232    J-Link Script File: Executing InitTarget()
+T748C 180:462.848   Check if Flash is read protected.
+T748C 180:468.272   
+Flash is read protected.
+T748C 180:468.576   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 180:468.608   Executing default behavior previously saved in the registry.
+T748C 180:468.640   Device will be unsecured now.
+T748C 180:468.656   Read protection disabled.
+T748C 240:377.056   
+  ***** Error: 
+T748C 240:377.136   J-Link script file function InitTarget() returned with error code -1
+T748C 240:377.184   InitTarget() end - Took 59.9s
+T748C 240:377.216 - 120081.624ms returns 0x00000000
+T748C 240:377.264 JLINK_GetId()
+T748C 240:377.808   InitTarget() start
+T748C 240:377.824    J-Link Script File: Executing InitTarget()
+T748C 240:463.744   Check if Flash is read protected.
+T748C 240:469.888   
+Flash is read protected.
+T748C 240:469.984   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 240:470.016   Executing default behavior previously saved in the registry.
+T748C 240:470.016   Device will be unsecured now.
+T748C 240:470.016   Read protection disabled.
+T748C 300:378.656   
+  ***** Error: 
+T748C 300:378.720   J-Link script file function InitTarget() returned with error code -1
+T748C 300:378.784   InitTarget() end - Took 60.0s
+T748C 300:378.816   Connect failed. Resetting via Reset pin and trying again.
+T748C 300:450.496   InitTarget() start
+T748C 300:450.592    J-Link Script File: Executing InitTarget()
+T748C 300:537.600   Check if Flash is read protected.
+T748C 300:543.808   
+Flash is read protected.
+T748C 300:544.064   Read or Write protection is active in Geehy APM32xx device.
+For Flash programming the device needs to allow memory read.
+T748C 300:544.064   Executing default behavior previously saved in the registry.
+T748C 300:544.064   Device will be unsecured now.
+T748C 300:544.096   Read protection disabled.
+T748C 360:450.560   
+  ***** Error: 
+T748C 360:450.624   J-Link script file function InitTarget() returned with error code -1
+T748C 360:450.688   InitTarget() end - Took 59.9s
+T748C 360:450.720 - 120073.448ms returns 0x00000000
+T748C 360:455.904 JLINK_GetFirmwareString(...)
+T748C 360:455.936 - 0.013ms 
+T32E0 482:699.680   
+  ***** Error: Connection to emulator lost!
+T748C 701:438.720 JLINK_Close()
+T748C 701:454.976 - 16.289ms
+T748C 701:454.976   
+T748C 701:454.976   Closed
