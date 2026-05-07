@@ -1,4 +1,5 @@
 #include "main.h"
+#include "bridge_cal.h"
 
 #define IS_MASTER_BOARD
 
@@ -50,6 +51,7 @@ int main(void)
     DAL_DeviceConfig();
     DAL_RCM_MCOConfig(RCM_MCO1, RCM_MCO1SOURCE_HSE, RCM_MCODIV_1);
     ADS131M08_InitAll();
+    BridgeCal_Init();    /* 校准模块初始化 (默认 passthrough, 不使能) */
 
     while (1)
     {
@@ -116,8 +118,21 @@ static void ReadAllADCDataToBuffer(void)
         for (uint8_t ch = 0; ch < ADC_CHANNELS_PER_CHIP; ch++)
         {
             int32_t adc_code = adc_frames[chip].ch_data[ch];
-            float voltage_uv_f = ((float)adc_code / 8388608.0f) * ADC_FULL_SCALE_UV;
-            int32_t voltage_uv = (int32_t)(voltage_uv_f + 0.5f);
+            float output_val;
+
+            /* ---- 线性校准接口 ---- */
+            if (g_brcal_coeff[chip][ch].enabled)
+            {
+                /* 二次多项式校正: ADC码 → 物理量 */
+                output_val = BridgeCal_Apply(chip, ch, adc_code);
+            }
+            else
+            {
+                /* 未校准: ADC码 → 电压 μV (保留原有行为) */
+                output_val = ((float)adc_code / 8388608.0f) * ADC_FULL_SCALE_UV;
+            }
+
+            int32_t voltage_uv = (int32_t)(output_val + 0.5f);
 
             int32_t abs_val = (voltage_uv >= 0) ? voltage_uv : -voltage_uv;
             uint32_t send_val = (uint32_t)abs_val & 0x007FFFFF;
