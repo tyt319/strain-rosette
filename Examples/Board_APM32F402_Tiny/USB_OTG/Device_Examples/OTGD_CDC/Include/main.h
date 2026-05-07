@@ -37,6 +37,7 @@
 #include "usbd_cdc.h"
 #include "usbd_cdc_vcp.h"
 #include "ads131m08.h"
+#include "bridge_cal.h"
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
