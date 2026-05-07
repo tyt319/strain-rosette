@@ -67,35 +67,18 @@ void ads_Delay_us(uint32_t us)
 }
 
 /* ------------------- DMA通道强制恢复 ------------------- */
-void DMA_Channel_Force_Recovery(DMA_HandleTypeDef *hdma)
+void DMA_Channel_Recovery(DMA_HandleTypeDef *hdma)
 {
     if(hdma == NULL) return;
 
-    // 1. 强制禁用 DMA 通道
+    //强制禁用 DMA 通道
     __DAL_DMA_DISABLE(hdma);
 
-    // 2. 重新计算并更新通道索引和基地址
-    if ((uint32_t)(hdma->Instance) < (uint32_t)(DMA2_Channel1))
-    {
-        hdma->ChannelIndex = (((uint32_t)hdma->Instance - (uint32_t)DMA1_Channel1) / 
-                             ((uint32_t)DMA1_Channel2 - (uint32_t)DMA1_Channel1)) << 2;
-        hdma->DmaBaseAddress = DMA1;
-    }
-    else
-    {
-        hdma->ChannelIndex = (((uint32_t)hdma->Instance - (uint32_t)DMA2_Channel1) / 
-                             ((uint32_t)DMA2_Channel2 - (uint32_t)DMA2_Channel1)) << 2;
-        hdma->DmaBaseAddress = DMA2;
-    }
-
-    // 3. 清除该通道的【所有】中断标志
-    hdma->DmaBaseAddress->INTFCLR = (DMA_INTFCLR_GINTCLR1 << (hdma->ChannelIndex));
-
-    // 4. 复位软件状态机与错误码
+    //复位软件状态机与错误码
     hdma->State = DAL_DMA_STATE_READY;
     hdma->ErrorCode = DAL_DMA_ERROR_NONE;
 
-    // 5. 释放锁
+    //释放锁
     __DAL_UNLOCK(hdma);
 }
 
@@ -118,15 +101,9 @@ void ADS131M08_CS_High(uint8_t chip_idx)
 static void Prepare_SPI_DMA_For_Transfer(void)
 {
     // 1. 恢复 DMA 通道状态
-    DMA_Channel_Force_Recovery(&hdma_spi1_tx);
-    DMA_Channel_Force_Recovery(&hdma_spi1_rx);
-
-    // 2. 复位 SPI 状态机
-    hspi1.State = DAL_SPI_STATE_READY;
-    hspi1.ErrorCode = DAL_SPI_ERROR_NONE;
-    __DAL_UNLOCK(&hspi1);
-
-    DAL_SPI_DMAResume(&hspi1);
+    DMA_Channel_Recovery(&hdma_spi1_tx);
+    DMA_Channel_Recovery(&hdma_spi1_rx);
+    
 }
 
 /* ------------------- 核心SPI帧传输 (全DMA版，同步阻塞) ------------------- */
