@@ -52,6 +52,9 @@ static ADS131M08_Frame_t *g_dma_frames_ptr = NULL;
 static ADS131M08_RxCpltCallback g_rx_cplt_cb = NULL;
 static volatile bool     g_is_reg_mode = false;
 static volatile bool     g_dma_reg_done = false;
+static volatile uint8_t  g_drdy_edge_count = 0;
+static volatile bool     g_drdy_trigger = false;
+static volatile bool     g_drdy_enable  = false;
 static uint8_t           g_reg_tx_buf[ADS131M08_FRAME_BYTES] __attribute__((aligned(4)));
 static uint8_t           g_reg_rx_buf[ADS131M08_FRAME_BYTES] __attribute__((aligned(4)));
 static uint8_t           g_current_reg_cs_idx = 0;
@@ -253,9 +256,49 @@ void ADS131M08_InitAll(void)
     {
         ADS131M08_InitSingle(i);
     }
+
+    ADS131M08_InitDRDY_EXTI();
 }
 
 /* ===================== DMA 核心逻辑 ===================== */
+
+/* DRDY EXTI 初始化: PA0 下降沿中断, 用于替代延时 */
+void ADS131M08_InitDRDY_EXTI(void)
+{
+    uint32_t regval;
+
+    /* AFIO: 选择 PA 作为 EINT0 的输入源 */
+    regval = AFIO->EINTSEL[0];
+    regval &= ~AFIO_EINTSEL1_EINT0_Msk;
+    regval |= AFIO_EINTSEL1_EINT0_PA;
+    AFIO->EINTSEL[0] = regval;
+
+    /* EINT: 使能 line0 下降沿触发和中断 */
+    EINT->FTEN  |= EINT_IMASK_IMASK0;
+    EINT->IMASK |= EINT_IMASK_IMASK0;
+
+    /* NVIC: 使能 EINT0 中断 */
+    DAL_NVIC_SetPriority(EINT0_IRQn, 2, 2);
+    DAL_NVIC_EnableIRQ(EINT0_IRQn);
+}
+
+/* DRDY 中断处理: 在第 3 次下降沿时置触发标志 */
+void ADS131M08_DRDY_IRQHandler(void)
+{
+    /* 清除中断挂起 */
+    EINT->IPEND = EINT_IMASK_IMASK0;
+
+    if (g_drdy_enable && !g_dma_busy && !g_is_reg_mode && !g_dma_round_done)
+    {
+        g_drdy_edge_count++;
+        if (g_drdy_edge_count >= 5)
+        {
+            g_drdy_edge_count = 0;
+            g_drdy_trigger = true;
+            g_drdy_enable  = false;
+        }
+    }
+}
 
 static void ADS131M08_StartNextDMA(void)
 {
@@ -338,6 +381,9 @@ void ADS131M08_ProcessRound(void)
         if (g_discard_count < 0)
         {
             g_discard_count++;
+            /* 丢弃轮次仍需使能 DRDY 计数以触发下一轮 DMA */
+            g_drdy_edge_count = 0;
+            g_drdy_enable = true;
         }
         else
         {
@@ -367,17 +413,21 @@ void ADS131M08_ProcessRound(void)
 
             g_discard_count = 0;
             if (g_rx_cplt_cb) g_rx_cplt_cb();
+
+            /* SYNC 已发送, 启动 DRDY 下降沿计数 */
+            g_drdy_edge_count = 0;
+            g_drdy_enable = true;
         }
     }
 
-    /* ---- 自动触发下一轮 DMA ---- */
+    /* ---- 自动触发下一轮 DMA (由 DRDY 第3次下降沿触发) ---- */
     if (!g_dma_busy && !g_is_reg_mode && !g_dma_round_done
         && g_dma_frames_ptr != NULL
-        && ADS131M08_DRDY_Read() == GPIO_PIN_RESET)
+        && g_drdy_trigger)
     {
+        g_drdy_trigger = false;
         g_dma_chip_idx = 0;
         g_dma_busy = true;
-        ads_Delay_us(650);
         ADS131M08_StartNextDMA();
     }
 }

@@ -184,3 +184,8 @@ void SPI1_IRQHandler(void)
     extern SPI_HandleTypeDef hspi1;
     DAL_SPI_IRQHandler(&hspi1);
 }
+
+void EINT0_IRQHandler(void)
+{
+    ADS131M08_DRDY_IRQHandler();
+}

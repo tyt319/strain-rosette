@@ -50,11 +50,11 @@
 void DAL_GPIO_Config(void)
 {
 
-    // 1. ¿ªÆô AFIO Ê±ÖÓ£¨±ØÐëµÚÒ»²½£©
+    // 1. ï¿½ï¿½ï¿½ï¿½ AFIO Ê±ï¿½Ó£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½
     __DAL_RCM_AFIO_CLK_ENABLE();
 
-    // 2. ¡¾ºËÐÄ°²È«²Ù×÷¡¿½ö½ûÓÃ JTAG£¬Ç¿ÖÆ±£Áô SWD
-    //    ºê¶¨ÒåËµÃ÷£ºAFIO_REMAP1_SWJ_CFG_JTAGDISABLE = ¹Ø±Õ JTAG£¬¿ªÆô SWD
+    // 2. ï¿½ï¿½ï¿½ï¿½ï¿½Ä°ï¿½È«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ JTAGï¿½ï¿½Ç¿ï¿½Æ±ï¿½ï¿½ï¿½ SWD
+    //    ï¿½ê¶¨ï¿½ï¿½Ëµï¿½ï¿½ï¿½ï¿½AFIO_REMAP1_SWJ_CFG_JTAGDISABLE = ï¿½Ø±ï¿½ JTAGï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SWD
     AFIO->REMAP1 = (AFIO->REMAP1 & ~AFIO_REMAP1_SWJ_CFG_Msk) | AFIO_REMAP1_SWJ_CFG_JTAGDISABLE;
 
     GPIO_InitTypeDef  GPIO_InitStruct = {0U};
@@ -84,65 +84,61 @@ void DAL_GPIO_Config(void)
 
     /* Configure the CS pin */
     GPIO_InitStruct.Pin     = GPIO_PIN_1;              //CS7
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     GPIO_InitStruct.Pull    = GPIO_NOPULL;
     GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOC, &GPIO_InitStruct); 
-    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
     GPIO_InitStruct.Pin     = GPIO_PIN_11;              //CS8
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     GPIO_InitStruct.Pull    = GPIO_NOPULL;
     GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
     GPIO_InitStruct.Pin     = GPIO_PIN_0;              //CS9
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     GPIO_InitStruct.Pull    = GPIO_NOPULL;
     GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
     GPIO_InitStruct.Pin     = GPIO_PIN_12;              //CS10
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     GPIO_InitStruct.Pull    = GPIO_NOPULL;
     GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    DAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
     // GPIO_InitStruct.Pin     = GPIO_PIN_10;              //CS11
-    // GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    // GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     // GPIO_InitStruct.Pull    = GPIO_NOPULL;
     // GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     // DAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-    // DAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    // DAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
     // GPIO_InitStruct.Pin     = GPIO_PIN_3;              //CS12
-    // GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    // GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     // GPIO_InitStruct.Pull    = GPIO_NOPULL;
     // GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     // DAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-    // DAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß£¨²»Ñ¡ÖÐ£©
+    // DAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½Ñ¡ï¿½Ð£ï¿½
 
 
 
     /* Configure the DRDY pin */
     GPIO_InitStruct.Pin     = GPIO_PIN_0;
-    GPIO_InitStruct.Mode    = GPIO_MODE_INPUT;         // ÊäÈëÄ£Ê½
+    GPIO_InitStruct.Mode    = GPIO_MODE_INPUT;         // ï¿½ï¿½ï¿½ï¿½Ä£Ê½
     GPIO_InitStruct.Pull    = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    // Ê¹ÄÜÖÐ¶Ï
-    DAL_NVIC_SetPriority(EINT0_IRQn, 2, 2);
-    DAL_NVIC_EnableIRQ(EINT0_IRQn);
-
     /* Configure the sync pin */
     GPIO_InitStruct.Pin     = GPIO_PIN_1;              //sync
-    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ÍÆÍìÊä³ö
+    GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     GPIO_InitStruct.Pull    = GPIO_PULLUP;
     GPIO_InitStruct.Speed   = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-    DAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET); // ³õÊ¼×´Ì¬£ºÀ­¸ß
+    DAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET); // ï¿½ï¿½Ê¼×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 }
