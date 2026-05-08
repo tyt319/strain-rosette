@@ -376,6 +376,7 @@ void ADS131M08_ProcessRound(void)
     {
         g_dma_chip_idx = 0;
         g_dma_busy = true;
+        // ads_Delay_us(1000);
         ADS131M08_StartNextDMA();
     }
 }
