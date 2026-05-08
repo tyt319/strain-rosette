@@ -344,7 +344,7 @@ void ADS131M08_ProcessRound(void)
     {
         g_dma_round_done = false;
 
-        if (g_discard_count < 3)
+        if (g_discard_count < 0)
         {
             g_discard_count++;
         }
@@ -376,7 +376,7 @@ void ADS131M08_ProcessRound(void)
     {
         g_dma_chip_idx = 0;
         g_dma_busy = true;
-        // ads_Delay_us(1000);
+        ads_Delay_us(650);
         ADS131M08_StartNextDMA();
     }
 }
