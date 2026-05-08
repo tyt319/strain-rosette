@@ -320,11 +320,10 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     }
 }
 
-/* 启动异步读取 */
+/* 启动异步读取 (首次调用用于设置回调并触发第一轮 DMA) */
 void ADS131M08_ReadAllChips_Async(ADS131M08_Frame_t *frames_array, ADS131M08_RxCpltCallback cb)
 {
-    // 检查：如果正在忙 或 正在进行寄存器操作 或 DRDY 无效，则拒绝
-    if (g_dma_busy || g_is_reg_mode || (ADS131M08_DRDY_Read() != GPIO_PIN_RESET))
+    if (g_dma_busy || g_is_reg_mode)
         return;
 
     g_dma_frames_ptr = frames_array;
@@ -335,39 +334,49 @@ void ADS131M08_ReadAllChips_Async(ADS131M08_Frame_t *frames_array, ADS131M08_RxC
     ADS131M08_StartNextDMA();
 }
 
-/* DMA 轮次处理：在 main 循环中调用，处理丢弃/捕获/SYNC/符号扩展
+/* DMA 轮次处理：在 main 循环中调用
+ * 处理丢弃/捕获/SYNC/符号扩展，并自动触发下一轮 DMA
  * 将耗时操作从中断上下文移至 main 上下文，保持回调轻量 */
 void ADS131M08_ProcessRound(void)
 {
-    if (!g_dma_round_done) return;
-    g_dma_round_done = false;
-
-    if (g_discard_count < 3)
+    /* ---- 处理已完成的 DMA 轮次 ---- */
+    if (g_dma_round_done)
     {
-        // 前 3 次丢弃脏数据, 等主循环在 DRDY=LOW 时发出下一次 DMA
-        g_discard_count++;
-    }
-    else
-    {
-        // 第 4 次读取: 捕获稳定数据
-        // SYNC 同步
-        DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
-        // ads_Delay_us(1);
-        DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
+        g_dma_round_done = false;
 
-        // 符号扩展
-        for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+        if (g_discard_count < 3)
         {
-            for (uint8_t ch = 0; ch < ADS131M08_NUM_CHANNELS; ch++)
-            {
-                uint32_t raw = (uint32_t)g_dma_frames_ptr[chip].ch_data[ch];
-                if (raw & 0x00800000)
-                    g_dma_frames_ptr[chip].ch_data[ch] = (int32_t)(raw | 0xFF000000);
-            }
+            g_discard_count++;
         }
+        else
+        {
+            DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
+            ads_Delay_us(1);
+            DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
 
-        g_discard_count = 0;
-        if (g_rx_cplt_cb) g_rx_cplt_cb();
+            for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+            {
+                for (uint8_t ch = 0; ch < ADS131M08_NUM_CHANNELS; ch++)
+                {
+                    uint32_t raw = (uint32_t)g_dma_frames_ptr[chip].ch_data[ch];
+                    if (raw & 0x00800000)
+                        g_dma_frames_ptr[chip].ch_data[ch] = (int32_t)(raw | 0xFF000000);
+                }
+            }
+
+            g_discard_count = 0;
+            if (g_rx_cplt_cb) g_rx_cplt_cb();
+        }
+    }
+
+    /* ---- 自动触发下一轮 DMA ---- */
+    if (!g_dma_busy && !g_is_reg_mode && !g_dma_round_done
+        && g_dma_frames_ptr != NULL
+        && ADS131M08_DRDY_Read() == GPIO_PIN_RESET)
+    {
+        g_dma_chip_idx = 0;
+        g_dma_busy = true;
+        ADS131M08_StartNextDMA();
     }
 }
 

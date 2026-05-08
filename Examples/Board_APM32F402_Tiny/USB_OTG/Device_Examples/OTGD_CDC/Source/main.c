@@ -50,23 +50,18 @@ int main(void)
     DAL_DeviceConfig();
     DAL_RCM_MCOConfig(RCM_MCO1, RCM_MCO1SOURCE_HSE, RCM_MCODIV_1);
     ADS131M08_InitAll();
-    BridgeCal_Init();    /* 校准模块初始化 (默认 passthrough, 不使能) */
+    BridgeCal_Init();
+    ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
 
     while (1)
     {
-        // 处理 DMA 轮次 (丢弃/捕获/SYNC), 将耗时操作留在 main 上下文
         ADS131M08_ProcessRound();
-
-        if (!ADS131M08_IsBusy() && (ADS131M08_DRDY_Read() == GPIO_PIN_RESET))
-        {
-            ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
-        }
 
         if (adc_data_ready)
         {
             adc_data_ready = false;
             DAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
-            ReadAllADCDataToBuffer();  // 只在这里算一次
+            ReadAllADCDataToBuffer();
         }
 
         USB_DevUserApplication();
