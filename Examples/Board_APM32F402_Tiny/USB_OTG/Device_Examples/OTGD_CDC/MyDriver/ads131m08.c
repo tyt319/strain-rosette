@@ -243,7 +243,7 @@ static void ADS131M08_InitSingle(uint8_t chip_idx)
 /* ------------------- 批量初始化 ------------------- */
 void ADS131M08_InitAll(void)
 {
-    DAL_Delay(1000);
+    // DAL_Delay(1000);
     DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
     DAL_Delay(10);
     DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
@@ -261,13 +261,12 @@ static void ADS131M08_StartNextDMA(void)
 {
     uint8_t idx = g_dma_chip_idx;
 
-    // 1. 统一准备 SPI 和 DMA 状态
+    // 恢复 DMA 通道 (禁能硬件通道 + 复位状态机, 确保寄存器可安全写入)
     Prepare_SPI_DMA_For_Transfer();
 
-    // 2. 准备发送数据
-    memset(g_dma_tx_buf[idx], 0, ADS131M08_FRAME_BYTES);
+    // g_dma_tx_buf 是静态BSS段, 编译时零初始化, 采集过程从不修改, 无需 memset
 
-    // 3. 拉片选，启动 DMA
+    // 拉片选，启动 DMA
     ADS131M08_CS_Low(idx);
     DAL_SPI_TransmitReceive_DMA(&hspi1, g_dma_tx_buf[idx], g_dma_rx_buf[idx], ADS131M08_FRAME_BYTES);
 }
@@ -310,10 +309,8 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     // 3. 判断是否所有芯片传输完成
     if (g_dma_chip_idx + 1 >= ADS131M08_NUM_CHIPS)
     {
-        // 回调只置标志, 丢弃/捕获/SYNC/符号扩展全在 main 中处理
         g_dma_busy = false;
         g_dma_round_done = true;
-        Prepare_SPI_DMA_For_Transfer();
     }
     else
     {
