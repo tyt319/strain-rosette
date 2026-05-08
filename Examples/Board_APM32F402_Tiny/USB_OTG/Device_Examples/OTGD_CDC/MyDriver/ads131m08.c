@@ -298,15 +298,7 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     // 1. 拉高 CS
     ADS131M08_CS_High(g_dma_chip_idx);
 
-    // 2. 拷贝数据
-    ADS131M08_Frame_t *frame = &g_dma_frames_ptr[g_dma_chip_idx];
-    for (int i = 0; i < ADS131M08_FRAME_WORDS; i++)
-    {
-        uint8_t *p = &g_dma_rx_buf[g_dma_chip_idx][i * 3];
-        frame->raw[i] = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
-    }
-
-    // 3. 判断是否所有芯片传输完成
+    // 2. 判断是否所有芯片传输完成
     if (g_dma_chip_idx + 1 >= ADS131M08_NUM_CHIPS)
     {
         g_dma_busy = false;
@@ -314,7 +306,6 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     }
     else
     {
-        // 下一片芯片
         g_dma_chip_idx++;
         ADS131M08_StartNextDMA();
     }
@@ -353,6 +344,16 @@ void ADS131M08_ProcessRound(void)
             DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
             ads_Delay_us(1);
             DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
+
+            // 将所有芯片的原始字节数据解包为32-bit字 (从ISR移至main上下文)
+            for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+            {
+                for (int i = 0; i < ADS131M08_FRAME_WORDS; i++)
+                {
+                    uint8_t *p = &g_dma_rx_buf[chip][i * 3];
+                    g_dma_frames_ptr[chip].raw[i] = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+                }
+            }
 
             for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
             {
