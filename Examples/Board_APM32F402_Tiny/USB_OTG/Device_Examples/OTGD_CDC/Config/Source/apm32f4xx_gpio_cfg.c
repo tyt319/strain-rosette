@@ -134,6 +134,9 @@ void DAL_GPIO_Config(void)
     GPIO_InitStruct.Speed = GPIO_SPEED_FAST;
     DAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+    DAL_NVIC_SetPriority(EINT0_IRQn, 2, 2);
+    DAL_NVIC_EnableIRQ(EINT0_IRQn);
+
     /* Configure the sync pin */
     GPIO_InitStruct.Pin     = GPIO_PIN_1;              //sync
     GPIO_InitStruct.Mode    = GPIO_MODE_OUTPUT_PP;     // �������
