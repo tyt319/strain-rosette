@@ -7,6 +7,11 @@
 #define CMD_READ_ADC_DATA    0x7BB7
 #define CMD_WRITE_REG        0x7AA7
 #define CMD_READ_REG         0x7CC7
+#define CMD_TARE             0x7DD7
+#define CMD_ZERO_RD          0x7DA7
+#define CMD_ZERO_WR          0x7DB7
+#define CMD_COEFF_WR         0x7CA7
+#define CMD_COEFF_RD         0x7CB7
 
 /************************ 硬件定义 ************************/
 #define ADC_TOTAL_CHIPS      ADS131M08_NUM_CHIPS
@@ -51,6 +56,7 @@ int main(void)
     DAL_RCM_MCOConfig(RCM_MCO1, RCM_MCO1SOURCE_HSE, RCM_MCODIV_1);
     ADS131M08_InitAll();
     BridgeCal_Init();
+    BridgeCal_LoadPresets();
     ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
     while (1)
     {
@@ -111,21 +117,17 @@ static void ReadAllADCDataToBuffer(void)
         for (uint8_t ch = 0; ch < ADC_CHANNELS_PER_CHIP; ch++)
         {
             int32_t adc_code = adc_frames[chip].ch_data[ch];
-            float output_val;
+            int32_t voltage_uv;
 
-            /* ---- 线性校准接口 ---- */
-            if (g_brcal_coeff[chip][ch].enabled)
+            if (g_brcal_coeff_fixed[chip][ch].enabled)
             {
-                /* 二次多项式校正: ADC码 → 物理量 */
-                output_val = BridgeCal_Apply(chip, ch, adc_code);
+                int32_t val_q16 = BridgeCal_ApplyFixed(chip, ch, adc_code);
+                voltage_uv = (val_q16 + BRCAL_Q16_ONE / 2) >> 16;
             }
             else
             {
-                /* 未校准: ADC码 → 电压 μV (保留原有行为) */
-                output_val = ((float)adc_code / 8388608.0f) * ADC_FULL_SCALE_UV;
+                voltage_uv = BridgeCal_AdcToUV(adc_code);
             }
-
-            int32_t voltage_uv = (int32_t)(output_val + 0.5f);
 
             int32_t abs_val = (voltage_uv >= 0) ? voltage_uv : -voltage_uv;
             uint32_t send_val = (uint32_t)abs_val & 0x007FFFFF;
@@ -202,6 +204,88 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         uint16_t val = ADS131M08_ReadReg(chip, reg);
         ADS131M08_Sync();
         sprintf(msg, "[READ]  CHIP%d REG%02X = 0x%04X\r\n", chip, reg, val);
+        SendString(msg);
+        return;
+    }
+
+    if (cmd == CMD_TARE && len == 2)
+    {
+        BridgeCal_TareAll(adc_frames);
+        sprintf(msg, "[TARE] All channels zeroed\r\n");
+        SendString(msg);
+        return;
+    }
+
+    if (cmd == CMD_ZERO_RD && len == 4)
+    {
+        uint8_t chip = buf[2], ch = buf[3];
+        if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
+        {
+            sprintf(msg, "[ZERO] Invalid chip=%d ch=%d\r\n", chip, ch);
+            SendString(msg);
+            return;
+        }
+        int32_t offset_adc = g_brcal_coeff[chip][ch].zero_offset;
+        int32_t offset_uv = BridgeCal_AdcToUV(offset_adc);
+        sprintf(msg, "[ZERO]  CHIP%d CH%d offset=%d uV\r\n", chip, ch, (int)offset_uv);
+        SendString(msg);
+        return;
+    }
+
+    if (cmd == CMD_ZERO_WR && len == 7)
+    {
+        uint8_t chip = buf[2], ch = buf[3];
+        int32_t offset_uv = (int32_t)((buf[4] << 16) | (buf[5] << 8) | buf[6]);
+        if (offset_uv & 0x800000) offset_uv |= 0xFF000000;
+        if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
+        {
+            sprintf(msg, "[ZERO] Invalid chip=%d ch=%d\r\n", chip, ch);
+            SendString(msg);
+            return;
+        }
+        int32_t offset_adc = BridgeCal_UVToAdc(offset_uv);
+        BridgeCal_SetZeroOffset(chip, ch, offset_adc);
+        sprintf(msg, "[ZERO]  CHIP%d CH%d offset=%d uV\r\n", chip, ch, (int)offset_uv);
+        SendString(msg);
+        return;
+    }
+
+    if (cmd == CMD_COEFF_WR && len == 17)
+    {
+        uint8_t chip = buf[3], ch = buf[4];
+        int32_t a0 = (int32_t)((buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | buf[8]);
+        int32_t a1 = (int32_t)((buf[9] << 24) | (buf[10] << 16) | (buf[11] << 8) | buf[12]);
+        int32_t a2 = (int32_t)((buf[13] << 24) | (buf[14] << 16) | (buf[15] << 8) | buf[16]);
+        if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
+        {
+            sprintf(msg, "[COEFF] Invalid chip=%d ch=%d\r\n", chip, ch);
+            SendString(msg);
+            return;
+        }
+        BridgeCal_SetCoeffFixed(chip, ch, a0, a1, a2);
+        sprintf(msg, "[COEFF] CHIP%d CH%d a0=%.6f a1=%.6f a2=%.6f\r\n",
+                chip, ch,
+                (double)a0 / 65536.0, (double)a1 / 65536.0, (double)a2 / 65536.0);
+        SendString(msg);
+        return;
+    }
+
+    if (cmd == CMD_COEFF_RD && len == 5)
+    {
+        uint8_t chip = buf[3], ch = buf[4];
+        if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
+        {
+            sprintf(msg, "[COEFF] Invalid chip=%d ch=%d\r\n", chip, ch);
+            SendString(msg);
+            return;
+        }
+        BridgeCalCoeffFixed_t *c = &g_brcal_coeff_fixed[chip][ch];
+        sprintf(msg, "[COEFF] CHIP%d CH%d a0=%.6f a1=%.6f a2=%.6f en=%d\r\n",
+                chip, ch,
+                (double)c->a0_q16 / 65536.0,
+                (double)c->a1_q16 / 65536.0,
+                (double)c->a2_q16 / 65536.0,
+                c->enabled);
         SendString(msg);
         return;
     }

@@ -10,6 +10,69 @@
 BridgeCalCoeff_t      g_brcal_coeff[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS];
 BridgeCalCoeffFixed_t g_brcal_coeff_fixed[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS];
 
+/* ===================== 预设系数表 (用户在此配置默认校准参数, 存于 Flash) ===================== */
+const BridgeCalCoeffFixed_t g_brcal_presets[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS] = {
+    /* CHIP 0 ────────────────────────────── */
+    {
+        {       0, 1 << 16,       0,           0,   false},  /* CH0 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH1 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH2 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH3 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH4 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH5 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH6 */
+        {       0, 1 << 16,       0,           0,   false},  /* CH7 */
+    },
+    /* CHIP 1 ────────────────────────────── */
+    {
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+    },
+    /* CHIP 2 ────────────────────────────── */
+    {
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+    },
+    /* CHIP 3 ────────────────────────────── */
+    {
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+        {       0, 1 << 16,       0,           0,   false},
+    },
+};
+
+void BridgeCal_LoadPresets(void)
+{
+    for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
+    {
+        for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+        {
+            const BridgeCalCoeffFixed_t *p = &g_brcal_presets[chip][ch];
+            if (!p->enabled) continue;
+
+            BridgeCal_SetCoeffFixed(chip, ch, p->a0_q16, p->a1_q16, p->a2_q16);
+            BridgeCal_SetZeroOffset(chip, ch, p->zero_offset);
+        }
+    }
+}
+
 /* ===================== 初始化 ===================== */
 void BridgeCal_Init(void)
 {
@@ -93,45 +156,38 @@ void BridgeCal_TareAll(const ADS131M08_Frame_t *frames)
     }
 }
 
-/* ===================== 浮点校正 ===================== */
+/* ===================== 浮点校正 (输入/输出均为 μV) ===================== */
 float BridgeCal_Apply(uint8_t chip, uint8_t ch, int32_t adc_raw)
 {
     if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
-        return (float)adc_raw;
+        return ((float)adc_raw / BRCAL_ADC_FULLSCALE_F) * ADC_FULL_SCALE_UV;
 
     BridgeCalCoeff_t *c = &g_brcal_coeff[chip][ch];
+    float x = ((float)(adc_raw - c->zero_offset) / BRCAL_ADC_FULLSCALE_F) * ADC_FULL_SCALE_UV;
 
     if (!c->enabled)
-        return (float)(adc_raw - c->zero_offset);
+        return x;
 
-    float x = (float)(adc_raw - c->zero_offset);
     return c->a0 + c->a1 * x + c->a2 * x * x;
 }
 
-/* ===================== 定点校正 (Q16.16, 无浮点) ===================== */
+/* ===================== 定点校正 (Q16.16, 输入/输出均为 μV) ===================== */
 int32_t BridgeCal_ApplyFixed(uint8_t chip, uint8_t ch, int32_t adc_raw)
 {
     if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
-        return adc_raw << 16;
+        return (int32_t)(((int64_t)adc_raw * BRCAL_ADC_TO_Q16_NUM) >> BRCAL_ADC_TO_Q16_SHIFT);
 
     BridgeCalCoeffFixed_t *c = &g_brcal_coeff_fixed[chip][ch];
-
-    /* 减去零点偏置, 转为 Q8.24 防止中间溢出 */
-    int32_t x = (int32_t)(adc_raw - c->zero_offset) << 8;   /* Q8.24 */
+    int32_t x_adc = (int32_t)(adc_raw - c->zero_offset);
+    int32_t x = (int32_t)(((int64_t)x_adc * BRCAL_ADC_TO_Q16_NUM) >> BRCAL_ADC_TO_Q16_SHIFT);
 
     if (!c->enabled)
-        return x >> 8;   /* 返回 Q16.16 (实际上等同于直接返回原始值) */
+        return x;
 
-    /* 使用 int64_t 中间累加防止溢出 */
     int64_t result = (int64_t)c->a0_q16;
-
-    /* a1 * x   : Q16.16 × Q8.24 = Q24.40, 右移 24 → Q16.16 */
-    result += ((int64_t)c->a1_q16 * x) >> 24;
-
-    /* a2 * x^2 : Q16.16 × Q16.48 = Q32.64, 右移 48 → Q16.16 */
-    result += ((int64_t)c->a2_q16 * ((int64_t)x * x >> 24)) >> 24;
-
-    return (int32_t)result;   /* Q16.16 */
+    result += ((int64_t)c->a1_q16 * x) >> 16;
+    result += ((int64_t)c->a2_q16 * ((int64_t)x * x >> 16)) >> 16;
+    return (int32_t)result;
 }
 
 /* ===================== 电桥解析解 ===================== */

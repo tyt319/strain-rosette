@@ -7,11 +7,13 @@
  *   - 零点偏移 (tare) 校准
  *   - 每通道独立使能 / 系数
  *
+ * 多项式输入 x 为 μV 值 (ADC码 → μV 转换已在内部完成):
+ *   y = a0 + a1·x + a2·x²   (x 单位 μV, y 单位由系数决定)
+ *
  * 标定流程:
- *   1. 硬件校零: 空载时记录各通道 ADC 值, 写入 zero_offset
- *   2. 施加已知载荷, 记录 (ADC_raw, 真实物理量) 对
- *   3. 用最小二乘拟合求 a0/a1/a2, 写入系数并使能
- *   4. 可选: 若输入已经是电压 μV, 系数直接作用在 μV 上
+ *   1. 空载时发送 TARE 命令 → 记录零点
+ *   2. 施加已知载荷, 从串口读取各通道 μV 值
+ *   3. 用最小二乘拟合求 a0/a1/a2 (x=μV, y=物理量), 写入系数并使能
  */
 
 #ifndef __BRIDGE_CAL_H
@@ -29,20 +31,37 @@ extern "C" {
 #define BRCAL_NUM_CHIPS    ADS131M08_NUM_CHIPS   /* 4 */
 #define BRCAL_NUM_CHANNELS ADS131M08_NUM_CHANNELS /* 8 */
 
+/* ADC 码 ↔ μV 转换常量 (由 ADC_FULL_SCALE_UV 推导) */
+#define BRCAL_ADC_FULLSCALE     8388608          /* 2^23 */
+#define BRCAL_ADC_FULLSCALE_F   8388608.0f
+#define BRCAL_Q16_ONE           65536             /* 2^16 */
+#define BRCAL_ADC_TO_Q16_SHIFT  8
+#define BRCAL_ADC_TO_Q16_NUM    ((int32_t)(ADC_FULL_SCALE_UV * 2.0f))  /* = 75375 */
+
+/* ADC 码 ↔ μV 转换 */
+static inline int32_t BridgeCal_AdcToUV(int32_t adc_code)
+{
+    return (int32_t)((float)adc_code / BRCAL_ADC_FULLSCALE_F * ADC_FULL_SCALE_UV + 0.5f);
+}
+static inline int32_t BridgeCal_UVToAdc(int32_t uv)
+{
+    return (int32_t)((float)uv / ADC_FULL_SCALE_UV * BRCAL_ADC_FULLSCALE_F + 0.5f);
+}
+
 /* ===================== 二次多项式系数结构体 ===================== */
 typedef struct
 {
-    float    a0, a1, a2;   /* y = a0 + a1*x + a2*x^2  (x = ADC 原始码或电压) */
+    float    a0, a1, a2;   /* y = a0 + a1*x + a2*x^2  (x 为 μV) */
     bool     enabled;       /* 该通道是否启用校准 */
-    int32_t  zero_offset;   /* 零点偏置 (ADC 原始码), 校准前先减去 */
+    int32_t  zero_offset;   /* 零点偏置 (ADC 原始码) */
 } BridgeCalCoeff_t;
 
 /* ===================== 定点 Q16.16 系数 (无浮点版) ===================== */
 typedef struct
 {
-    int32_t  a0_q16;       /* a0 << 16 */
-    int32_t  a1_q16;       /* a1 << 16 */
-    int32_t  a2_q16;       /* a2 << 16 */
+    int32_t  a0_q16;       /* a0 × 2^16 */
+    int32_t  a1_q16;       /* a1 × 2^16 */
+    int32_t  a2_q16;       /* a2 × 2^16 */
     bool     enabled;
     int32_t  zero_offset;  /* 零点偏置 (ADC 原始码) */
 } BridgeCalCoeffFixed_t;
@@ -51,6 +70,10 @@ typedef struct
 /* 每个芯片每个通道一组系数; 可放在 Flash 中预存 */
 extern BridgeCalCoeff_t      g_brcal_coeff[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS];
 extern BridgeCalCoeffFixed_t g_brcal_coeff_fixed[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS];
+
+/* ===================== 预设系数 (编译期配置, 存于 Flash) ===================== */
+extern const BridgeCalCoeffFixed_t g_brcal_presets[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS];
+void BridgeCal_LoadPresets(void);
 
 /* ===================== API ===================== */
 
@@ -62,22 +85,22 @@ extern BridgeCalCoeffFixed_t g_brcal_coeff_fixed[BRCAL_NUM_CHIPS][BRCAL_NUM_CHAN
 void BridgeCal_Init(void);
 
 /**
- * @brief  设置某通道的浮点校准系数并立即使能
+ * @brief  设置某通道的浮点校准系数并立即使能 (x=μV)
  * @param  chip  芯片索引 [0..3]
  * @param  ch    通道索引 [0..7]
- * @param  a0    零阶系数 (单位: 物理量)
- * @param  a1    一阶系数
- * @param  a2    二阶系数
+ * @param  a0    零阶系数 (输出物理量单位)
+ * @param  a1    一阶系数 (物理量/μV)
+ * @param  a2    二阶系数 (物理量/μV²)
  */
 void BridgeCal_SetCoeff(uint8_t chip, uint8_t ch, float a0, float a1, float a2);
 
 /**
- * @brief  设置某通道的定点 Q16.16 校准系数并立即使能
+ * @brief  设置某通道的定点 Q16.16 校准系数并立即使能 (x=μV Q16.16)
  * @param  chip   芯片索引 [0..3]
  * @param  ch     通道索引 [0..7]
- * @param  a0_q16 a0 左移16位
- * @param  a1_q16 a1 左移16位
- * @param  a2_q16 a2 左移16位
+ * @param  a0_q16 a0 × 2^16
+ * @param  a1_q16 a1 × 2^16
+ * @param  a2_q16 a2 × 2^16
  */
 void BridgeCal_SetCoeffFixed(uint8_t chip, uint8_t ch,
                              int32_t a0_q16, int32_t a1_q16, int32_t a2_q16);
@@ -103,20 +126,20 @@ void BridgeCal_TareAll(const ADS131M08_Frame_t *frames);
 /* ========== 校正计算 ========== */
 
 /**
- * @brief  浮点校正: ADC 原始码 → 物理量
+ * @brief  浮点校正: ADC 原始码 → 物理量 (多项式输入为 μV)
  * @param  chip 芯片索引
  * @param  ch   通道索引
  * @param  adc_raw ADC 原始 24 位有符号码值
- * @return 校正后的物理量 (单位由标定系数决定)
+ * @return 校正后的物理量 (单位由标定系数决定, 内部 x = μV)
  */
 float BridgeCal_Apply(uint8_t chip, uint8_t ch, int32_t adc_raw);
 
 /**
- * @brief  定点校正 (Q16.16): ADC 原始码 → Q16.16 物理量
+ * @brief  定点校正 (Q16.16): ADC 原始码 → Q16.16 物理量 (多项式输入为 μV)
  * @param  chip 芯片索引
  * @param  ch   通道索引
  * @param  adc_raw ADC 原始 24 位有符号码值
- * @return 校正后的物理量 (Q16.16 格式, 需右移16位得到整数部分)
+ * @return 校正后的物理量 (Q16.16 格式, 内部 x = μV Q16.16)
  */
 int32_t BridgeCal_ApplyFixed(uint8_t chip, uint8_t ch, int32_t adc_raw);
 
