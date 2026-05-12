@@ -47,7 +47,7 @@ extern "C" {
 #define ADS131M08_REG_GAIN2    0x05
 #define ADS131M08_REG_CFG      0x06
 
-#define CLOCK_EXT_CLK_EXT_REF    0xFFCA
+#define CLOCK_EXT_CLK_EXT_REF    0xFFCE
 #define CLOCK_ALL_CH_DISABLE      0x000E
 #define MODE_CONFIG_LEVEL_24BIT   (0x0100 | 0x0010 | 0x0002)
 #define GAIN_32                    0x5555
@@ -89,7 +89,7 @@ void ADS131M08_ReadAllChips_Async(ADS131M08_Frame_t *frames_array, ADS131M08_RxC
 bool ADS131M08_IsBusy(void);
 void ADS131M08_DMA_TxRxCpltCallback(void);
 void ADS131M08_ProcessRound(void);
-void ADS131M08_InitDRDY_EXTI(void);
+void ADS131M08_Sync(void);
 void ADS131M08_DRDY_IRQHandler(void);
 
 #ifdef __cplusplus

@@ -47,13 +47,11 @@ const uint32_t ads131m08_gcal_values[4][8] = {
 static volatile uint8_t  g_dma_chip_idx;
 static volatile bool     g_dma_busy = false;
 static volatile bool     g_dma_round_done = false;  // 一轮 DMA 链已完成, 待 main 处理
+static volatile uint8_t  g_discard_count = 3;       // 同步后已读次数: 0~2丢弃; ≥3捕获
 static ADS131M08_Frame_t *g_dma_frames_ptr = NULL;
 static ADS131M08_RxCpltCallback g_rx_cplt_cb = NULL;
 static volatile bool     g_is_reg_mode = false;
 static volatile bool     g_dma_reg_done = false;
-static volatile uint8_t  g_drdy_edge_count = 0;
-static volatile bool     g_drdy_trigger = false;
-static volatile bool     g_drdy_enable  = false;
 static uint8_t           g_reg_tx_buf[ADS131M08_FRAME_BYTES] __attribute__((aligned(4)));
 static uint8_t           g_reg_rx_buf[ADS131M08_FRAME_BYTES] __attribute__((aligned(4)));
 static uint8_t           g_current_reg_cs_idx = 0;
@@ -255,44 +253,9 @@ void ADS131M08_InitAll(void)
     {
         ADS131M08_InitSingle(i);
     }
-
-    ADS131M08_InitDRDY_EXTI();
 }
 
 /* ===================== DMA 核心逻辑 ===================== */
-
-/* DRDY EXTI 初始化: PA0 下降沿触发, IMASK 由 ProcessRound 动态门控 */
-void ADS131M08_InitDRDY_EXTI(void)
-{
-    uint32_t regval;
-
-    /* AFIO: 选择 PA 作为 EINT0 的输入源 */
-    regval = AFIO->EINTSEL[0];
-    regval &= ~AFIO_EINTSEL1_EINT0_Msk;
-    regval |= AFIO_EINTSEL1_EINT0_PA;
-    AFIO->EINTSEL[0] = regval;
-
-    /* EINT: 使能 line0 下降沿触发 (中断由 ProcessRound 按需开关) */
-    EINT->FTEN  |= EINT_IMASK_IMASK0;
-}
-
-/* DRDY 中断处理: 在第 5 次下降沿时置触发标志 */
-void ADS131M08_DRDY_IRQHandler(void)
-{
-    /* 清除中断挂起 */
-    EINT->IPEND = EINT_IPEND_IPEND0;
-
-    if (g_drdy_enable && !g_dma_busy && !g_is_reg_mode && !g_dma_round_done)
-    {
-        g_drdy_edge_count++;
-        if (g_drdy_edge_count >= 5)
-        {
-            g_drdy_edge_count = 0;
-            g_drdy_trigger = true;
-            g_drdy_enable  = false;
-        }
-    }
-}
 
 static void ADS131M08_StartNextDMA(void)
 {
@@ -335,7 +298,15 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     // 1. 拉高 CS
     ADS131M08_CS_High(g_dma_chip_idx);
 
-    // 2. 判断是否所有芯片传输完成
+    // 2. 拷贝数据
+    ADS131M08_Frame_t *frame = &g_dma_frames_ptr[g_dma_chip_idx];
+    for (int i = 0; i < ADS131M08_FRAME_WORDS; i++)
+    {
+        uint8_t *p = &g_dma_rx_buf[g_dma_chip_idx][i * 3];
+        frame->raw[i] = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+    }
+
+    // 3. 判断是否所有芯片传输完成
     if (g_dma_chip_idx + 1 >= ADS131M08_NUM_CHIPS)
     {
         g_dma_busy = false;
@@ -343,6 +314,7 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     }
     else
     {
+        // 下一片芯片
         g_dma_chip_idx++;
         ADS131M08_StartNextDMA();
     }
@@ -372,50 +344,34 @@ void ADS131M08_ProcessRound(void)
     {
         g_dma_round_done = false;
 
-        DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
-        ads_Delay_us(1);
-        DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
-
-        // 将所有芯片的原始字节数据解包为32-bit字并做符号扩展 (从ISR移至main上下文)
-        for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+        if (g_discard_count < 3)
         {
-            const uint8_t *buf = g_dma_rx_buf[chip];
-            uint32_t *out = g_dma_frames_ptr[chip].raw;
-
-            // Word 0: STATUS
-            out[0] = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | buf[2];
-
-            // Words 1~8: CH_DATA (含24-bit符号扩展)
-            const uint8_t *p = &buf[3];
-            for (int i = 1; i <= 8; i++, p += 3)
+            g_discard_count++;
+        }
+        else
+        {
+            for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
             {
-                uint32_t val = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
-                if (val & 0x00800000)
-                    val |= 0xFF000000;
-                out[i] = val;
+                for (uint8_t ch = 0; ch < ADS131M08_NUM_CHANNELS; ch++)
+                {
+                    uint32_t raw = (uint32_t)g_dma_frames_ptr[chip].ch_data[ch];
+                    if (raw & 0x00800000)
+                        g_dma_frames_ptr[chip].ch_data[ch] = (int32_t)(raw | 0xFF000000);
+                }
             }
 
-            // Word 9: CRC
-            out[9] = ((uint32_t)buf[27] << 16) | ((uint32_t)buf[28] << 8) | buf[29];
+            if (g_rx_cplt_cb) g_rx_cplt_cb();
         }
-
-        if (g_rx_cplt_cb) g_rx_cplt_cb();
-
-        /* SYNC 已发送, 启动 DRDY 下降沿计数 */
-        g_drdy_edge_count = 0;
-        g_drdy_enable = true;
-        EINT->IMASK |= EINT_IMASK_IMASK0;
     }
 
-    /* ---- 自动触发下一轮 DMA (由 DRDY 第5次下降沿触发) ---- */
+    /* ---- 自动触发下一轮 DMA ---- */
     if (!g_dma_busy && !g_is_reg_mode && !g_dma_round_done
         && g_dma_frames_ptr != NULL
-        && g_drdy_trigger)
+        && ADS131M08_DRDY_Read() == GPIO_PIN_RESET)
     {
-        EINT->IMASK &= ~EINT_IMASK_IMASK0;
-        g_drdy_trigger = false;
         g_dma_chip_idx = 0;
         g_dma_busy = true;
+        // ads_Delay_us(650);
         ADS131M08_StartNextDMA();
     }
 }
@@ -424,4 +380,19 @@ void ADS131M08_ProcessRound(void)
 bool ADS131M08_IsBusy(void)
 {
     return g_dma_busy || g_is_reg_mode || g_dma_round_done;
+}
+
+/* DRDY 下降沿中断 (EINT0) */
+void ADS131M08_DRDY_IRQHandler(void)
+{
+    EINT->IPEND = (uint32_t)GPIO_PIN_0;
+}
+
+/* 触发硬件同步脉冲，并清零丢弃计数器 */
+void ADS131M08_Sync(void)
+{
+    DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
+    ads_Delay_us(1);
+    DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
+    g_discard_count = 0;//同步之后丢弃3轮数据确保数据稳定
 }

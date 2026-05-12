@@ -46,6 +46,7 @@
 /* Exported function prototypes *******************************************/
 void DAL_DeviceConfig(void);
 void DAL_SysClkConfig(void);
+void DAL_DMA_Config(void);
 
 #ifdef __cplusplus
 }
