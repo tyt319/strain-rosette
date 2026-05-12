@@ -238,6 +238,7 @@ void ADS131M08_InitAll(void)
     {
         ADS131M08_InitSingle(i);
     }
+    ADS131M08_AutoCalibrate();
 }
 
 /* ===================== DMA 核心逻辑 ===================== */
