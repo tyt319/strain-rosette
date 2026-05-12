@@ -20,34 +20,44 @@ const uint8_t GCAL_LSB_ADDR[8]   = {0x0D, 0x12, 0x17, 0x1C, 0x21, 0x26, 0x2B, 0x
 // 偏置校准值数组定义(12)
 const uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8] = {
     // ---------- 芯片 0 ----------
-    {0x0050A0, 0x0053C9, 0x007429, 0x006CFD, 0x003E9A, 0x003CA8, 0x0086C4, 0x005CAF},
-    
+    {0x00631E, 0x0065BA, 0x008429, 0x007C55, 0x004E40, 0x004BA5, 0x009749, 0x006BD0},
+
     // ---------- 芯片 1 ----------
-    {0x008FDC, 0x00734A, 0x005BA4, 0x006135, 0x005CAF, 0x004A9A, 0x007F4A, 0x0063FD},
-    
+    {0x00A297, 0x008429, 0x006935, 0x007108, 0x006AF2, 0x00598E, 0x008E98, 0x007561},
+
     // ---------- 芯片 2 ----------
-    {0x005822, 0x005D35, 0x005D61, 0x0059BB, 0x003B69, 0x006935, 0x005B78, 0x00531F},
-    
+    {0x006935, 0x006E6C, 0x006CAF, 0x006AF2, 0x004D62, 0x00771E, 0x006AF2, 0x006240},
+
     // ---------- 芯片 3 ----------
-    {0x004DD7, 0x007B16, 0x0052C6, 0x005DE7, 0x004457, 0x0044DD, 0x0050F9, 0x004B1F}
+    {0x005FA4, 0x008B1D, 0x006161, 0x006D8D, 0x005378, 0x005457, 0x006083, 0x005B4B}
 };
 // 增益校准值数组定义
 const uint32_t ads131m08_gcal_values[4][8] = {
     // ---------- 芯片 0 ----------
-    {0x7EEA63, 0x7E8A4D, 0x7EAF53, 0x7E8543, 0x7F0621, 0x7EA05F, 0x7E7F35, 0x7F4745},
+    {0x0081A6BA, 0x00817EA2, 0x008284FD, 0x00824152, 0x0080E5D6, 0x0080B79C, 0x0083064F, 0x0081DC56},
     // ---------- 芯片 1 ----------
-    {0x7EB47B, 0x7E465D, 0x7ED299, 0x7E99A5, 0x7EAFD7, 0x7E3997, 0x7E45D9, 0x7EFBC1},
+    {0x0083663E, 0x00825598, 0x0081BAD0, 0x0081CEEB, 0x0081A00A, 0x0081004F, 0x0082ADB8, 0x00820B63},
     // ---------- 芯片 2 ----------
-    {0x7F9157, 0x7E9E9D, 0x7EBF43, 0x7EC47B, 0x7F1A19, 0x7EED9B, 0x7E8477, 0x7F62A3},
+    {0x0081F07C, 0x0081C183, 0x0081D5A0, 0x0081C183, 0x00810D8F, 0x008233D2, 0x0081A6BA, 0x00818BFD},
     // ---------- 芯片 3 ----------
-    {0x7EAF53, 0x7E989F, 0x7E9DD7, 0x7E8A4D, 0x7F2E8F, 0x7EC993, 0x7E99A5, 0x7F2E8F}
+    {0x00816AA0, 0x00827E35, 0x00815D4C, 0x0081CEEB, 0x00812175, 0x00810D8F, 0x00814954, 0x008156A3}
 };
+
+#define ADS131M08_DISCARD_FRAMES   3u
+#define ADS131M08_SIGN_BIT        0x00800000u
+#define ADS131M08_SIGN_EXT_MASK   0xFF000000u
+
+static inline uint32_t Bytes3ToU32(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+}
 
 /* ------------------- 内部变量 ------------------- */
 static volatile uint8_t  g_dma_chip_idx;
 static volatile bool     g_dma_busy = false;
-static volatile bool     g_dma_round_done = false;  // 一轮 DMA 链已完成, 待 main 处理
-static volatile uint8_t  g_discard_count = 3;       // 同步后已读次数: 0~2丢弃; ≥3捕获
+static volatile bool     g_dma_round_done = false;
+static volatile uint8_t  g_discard_count = ADS131M08_DISCARD_FRAMES;
+static volatile bool     g_drdy_was_high = true;
 static ADS131M08_Frame_t *g_dma_frames_ptr = NULL;
 static ADS131M08_RxCpltCallback g_rx_cplt_cb = NULL;
 static volatile bool     g_is_reg_mode = false;
@@ -152,9 +162,7 @@ void ADS131M08_SPI_TransferFrame(uint8_t chip_idx, ADS131M08_Frame_t *tx_frame, 
     {
         for(uint8_t i=0; i<ADS131M08_FRAME_WORDS; i++)
         {
-            rx_frame->raw[i] = ((uint32_t)g_reg_rx_buf[i*3 + 0] << 16) | 
-                               ((uint32_t)g_reg_rx_buf[i*3 + 1] << 8)  | 
-                               ((uint32_t)g_reg_rx_buf[i*3 + 2]);
+            rx_frame->raw[i] = Bytes3ToU32(&g_reg_rx_buf[i * 3]);
         }
     }
 }
@@ -217,22 +225,22 @@ static void ADS131M08_InitSingle(uint8_t chip_idx)
     for(uint8_t ch=0; ch<8; ch++)
     {
         uint32_t ocal_val = ads131m08_ocal_values[chip_idx][ch];
-        uint32_t gcal_val = ads131m08_gcal_values[chip_idx][ch];
+        // uint32_t gcal_val = ads131m08_gcal_values[chip_idx][ch];
         
         uint16_t ocal_msb = (ocal_val >> 8) & 0xFFFF;
         uint16_t ocal_lsb = ocal_val & 0x00FF;
-        uint16_t gcal_msb = (gcal_val >> 8) & 0xFFFF;
-        uint16_t gcal_lsb = gcal_val & 0x00FF;
+        // uint16_t gcal_msb = (gcal_val >> 8) & 0xFFFF;
+        // uint16_t gcal_lsb = gcal_val & 0x00FF;
 
         // 3. 依次写入两个寄存器
         ADS131M08_WriteReg(chip_idx, OCAL_MSB_ADDR[ch], ocal_msb);
         DAL_Delay(1);
         ADS131M08_WriteReg(chip_idx, OCAL_LSB_ADDR[ch], ocal_lsb);
         DAL_Delay(1);
-        ADS131M08_WriteReg(chip_idx, GCAL_MSB_ADDR[ch], gcal_msb);
-        DAL_Delay(1);
-        ADS131M08_WriteReg(chip_idx, GCAL_LSB_ADDR[ch], gcal_lsb);
-        DAL_Delay(1);
+        // ADS131M08_WriteReg(chip_idx, GCAL_MSB_ADDR[ch], gcal_msb);
+        // DAL_Delay(1);
+        // ADS131M08_WriteReg(chip_idx, GCAL_LSB_ADDR[ch], gcal_lsb);
+        // DAL_Delay(1);
     }
     
     // 【优化】初始化时就清空FIFO，避免在DMA采集中途调用阻塞函数
@@ -273,40 +281,25 @@ static void ADS131M08_StartNextDMA(void)
 
 void ADS131M08_DMA_TxRxCpltCallback(void)
 {
-    // ==========================================
-    // 分支 1：处理寄存器操作的回调
-    // ==========================================
     if (g_is_reg_mode)
     {
-        // 1. 立即拉高 CS
         ADS131M08_CS_High(g_current_reg_cs_idx);
-
-        // 2. 统一恢复状态 (为下一次传输做准备)
         Prepare_SPI_DMA_For_Transfer();
-
-        // 3. 标记完成
         g_dma_reg_done = true;
         g_is_reg_mode = false;
         return;
     }
 
-    // ==========================================
-    // 分支 2：处理正常数据采集的回调
-    // ==========================================
     if (!g_dma_busy) return;
 
-    // 1. 拉高 CS
     ADS131M08_CS_High(g_dma_chip_idx);
 
-    // 2. 拷贝数据
     ADS131M08_Frame_t *frame = &g_dma_frames_ptr[g_dma_chip_idx];
     for (int i = 0; i < ADS131M08_FRAME_WORDS; i++)
     {
-        uint8_t *p = &g_dma_rx_buf[g_dma_chip_idx][i * 3];
-        frame->raw[i] = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+        frame->raw[i] = Bytes3ToU32(&g_dma_rx_buf[g_dma_chip_idx][i * 3]);
     }
 
-    // 3. 判断是否所有芯片传输完成
     if (g_dma_chip_idx + 1 >= ADS131M08_NUM_CHIPS)
     {
         g_dma_busy = false;
@@ -314,7 +307,6 @@ void ADS131M08_DMA_TxRxCpltCallback(void)
     }
     else
     {
-        // 下一片芯片
         g_dma_chip_idx++;
         ADS131M08_StartNextDMA();
     }
@@ -334,17 +326,13 @@ void ADS131M08_ReadAllChips_Async(ADS131M08_Frame_t *frames_array, ADS131M08_RxC
     ADS131M08_StartNextDMA();
 }
 
-/* DMA 轮次处理：在 main 循环中调用
- * 处理丢弃/捕获/SYNC/符号扩展，并自动触发下一轮 DMA
- * 将耗时操作从中断上下文移至 main 上下文，保持回调轻量 */
 void ADS131M08_ProcessRound(void)
 {
-    /* ---- 处理已完成的 DMA 轮次 ---- */
     if (g_dma_round_done)
     {
         g_dma_round_done = false;
 
-        if (g_discard_count < 3)
+        if (g_discard_count < ADS131M08_DISCARD_FRAMES)
         {
             g_discard_count++;
         }
@@ -355,8 +343,8 @@ void ADS131M08_ProcessRound(void)
                 for (uint8_t ch = 0; ch < ADS131M08_NUM_CHANNELS; ch++)
                 {
                     uint32_t raw = (uint32_t)g_dma_frames_ptr[chip].ch_data[ch];
-                    if (raw & 0x00800000)
-                        g_dma_frames_ptr[chip].ch_data[ch] = (int32_t)(raw | 0xFF000000);
+                    if (raw & ADS131M08_SIGN_BIT)
+                        g_dma_frames_ptr[chip].ch_data[ch] = (int32_t)(raw | ADS131M08_SIGN_EXT_MASK);
                 }
             }
 
@@ -364,15 +352,19 @@ void ADS131M08_ProcessRound(void)
         }
     }
 
-    /* ---- 自动触发下一轮 DMA ---- */
-    if (!g_dma_busy && !g_is_reg_mode && !g_dma_round_done
-        && g_dma_frames_ptr != NULL
-        && ADS131M08_DRDY_Read() == GPIO_PIN_RESET)
     {
-        g_dma_chip_idx = 0;
-        g_dma_busy = true;
-        // ads_Delay_us(650);
-        ADS131M08_StartNextDMA();
+        bool drdy_low = (ADS131M08_DRDY_Read() == GPIO_PIN_RESET);
+
+        if (!g_dma_busy && !g_is_reg_mode && !g_dma_round_done
+            && g_dma_frames_ptr != NULL
+            && g_drdy_was_high && drdy_low)
+        {
+            g_dma_chip_idx = 0;
+            g_dma_busy = true;
+            ADS131M08_StartNextDMA();
+        }
+
+        g_drdy_was_high = !drdy_low;
     }
 }
 
@@ -382,17 +374,15 @@ bool ADS131M08_IsBusy(void)
     return g_dma_busy || g_is_reg_mode || g_dma_round_done;
 }
 
-/* DRDY 下降沿中断 (EINT0) */
 void ADS131M08_DRDY_IRQHandler(void)
 {
     EINT->IPEND = (uint32_t)GPIO_PIN_0;
 }
 
-/* 触发硬件同步脉冲，并清零丢弃计数器 */
 void ADS131M08_Sync(void)
 {
     DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
     ads_Delay_us(1);
     DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
-    g_discard_count = 0;//同步之后丢弃3轮数据确保数据稳定
+    g_discard_count = 0;
 }
