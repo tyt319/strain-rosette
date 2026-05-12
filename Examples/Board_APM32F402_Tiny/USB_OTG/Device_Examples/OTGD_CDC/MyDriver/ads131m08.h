@@ -89,6 +89,7 @@ void ADS131M08_ReadAllChips_Async(ADS131M08_Frame_t *frames_array, ADS131M08_RxC
 bool ADS131M08_IsBusy(void);
 void ADS131M08_DMA_TxRxCpltCallback(void);
 void ADS131M08_ProcessRound(void);
+void ADS131M08_Sync(void);
 
 #ifdef __cplusplus
 }

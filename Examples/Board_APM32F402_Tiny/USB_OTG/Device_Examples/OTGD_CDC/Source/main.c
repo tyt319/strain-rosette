@@ -51,6 +51,7 @@ int main(void)
     DAL_RCM_MCOConfig(RCM_MCO1, RCM_MCO1SOURCE_HSE, RCM_MCODIV_1);
     ADS131M08_InitAll();
     BridgeCal_Init();
+    ADS131M08_Sync();
     ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
 
     while (1)
@@ -191,6 +192,7 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         uint8_t chip = buf[3], reg = buf[4];
         uint16_t val = (buf[5] << 8) | buf[6];
         uint16_t echo = ADS131M08_WriteReg(chip, reg, val);
+        ADS131M08_Sync();
         sprintf(msg, "[WRITE] CHIP%d REG%02X = 0x%04X (ECHO:0x%04X)\r\n", chip, reg, val, echo);
         SendString(msg);
         return;
@@ -200,6 +202,7 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
     {
         uint8_t chip = buf[3], reg = buf[4];
         uint16_t val = ADS131M08_ReadReg(chip, reg);
+        ADS131M08_Sync();
         sprintf(msg, "[READ]  CHIP%d REG%02X = 0x%04X\r\n", chip, reg, val);
         SendString(msg);
         return;

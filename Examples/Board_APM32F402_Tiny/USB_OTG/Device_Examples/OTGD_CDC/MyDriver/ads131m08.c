@@ -344,16 +344,12 @@ void ADS131M08_ProcessRound(void)
     {
         g_dma_round_done = false;
 
-        if (g_discard_count < 0)
+        if (g_discard_count < 3)
         {
             g_discard_count++;
         }
         else
         {
-            DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
-            ads_Delay_us(1);
-            DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
-
             for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
             {
                 for (uint8_t ch = 0; ch < ADS131M08_NUM_CHANNELS; ch++)
@@ -364,7 +360,6 @@ void ADS131M08_ProcessRound(void)
                 }
             }
 
-            g_discard_count = 0;
             if (g_rx_cplt_cb) g_rx_cplt_cb();
         }
     }
@@ -385,4 +380,13 @@ void ADS131M08_ProcessRound(void)
 bool ADS131M08_IsBusy(void)
 {
     return g_dma_busy || g_is_reg_mode || g_dma_round_done;
+}
+
+/* 触发硬件同步脉冲，并清零丢弃计数器 */
+void ADS131M08_Sync(void)
+{
+    DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_RESET);
+    ads_Delay_us(1);
+    DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
+    g_discard_count = 0;
 }
