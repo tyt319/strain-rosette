@@ -211,7 +211,10 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
     if (cmd == CMD_TARE && len == 2)
     {
         BridgeCal_TareAll(adc_frames);
-        sprintf(msg, "[TARE] All channels zeroed\r\n");
+        for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
+            for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                BridgeCal_Enable(chip, ch);
+        sprintf(msg, "[TARE] All channels zeroed & enabled\r\n");
         SendString(msg);
         return;
     }
