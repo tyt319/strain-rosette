@@ -18,7 +18,7 @@ const uint8_t OCAL_LSB_ADDR[8]   = {0x0B, 0x10, 0x15, 0x1A, 0x1F, 0x24, 0x29, 0x
 const uint8_t GCAL_MSB_ADDR[8]   = {0x0C, 0x11, 0x16, 0x1B, 0x20, 0x25, 0x2A, 0x2F};
 const uint8_t GCAL_LSB_ADDR[8]   = {0x0D, 0x12, 0x17, 0x1C, 0x21, 0x26, 0x2B, 0x30};
 // 偏置校准值数组定义(12)
-const uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8] = {
+uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8] = {
     // ---------- 芯片 0 ----------
     {0x00631E, 0x0065BA, 0x008429, 0x007C55, 0x004E40, 0x004BA5, 0x009749, 0x006BD0},
 
@@ -32,7 +32,7 @@ const uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8] = {
     {0x005FA4, 0x008B1D, 0x006161, 0x006D8D, 0x005378, 0x005457, 0x006083, 0x005B4B}
 };
 // 增益校准值数组定义
-const uint32_t ads131m08_gcal_values[4][8] = {
+uint32_t ads131m08_gcal_values[ADS131M08_NUM_CHIPS][8] = {
     // ---------- 芯片 0 ----------
     {0x0081A6BA, 0x00817EA2, 0x008284FD, 0x00824152, 0x0080E5D6, 0x0080B79C, 0x0083064F, 0x0081DC56},
     // ---------- 芯片 1 ----------
@@ -215,35 +215,12 @@ static void ADS131M08_InitSingle(uint8_t chip_idx)
     DAL_Delay(1);
     ADS131M08_WriteReg(chip_idx, ADS131M08_REG_CLOCK, CLOCK_EXT_CLK_EXT_REF);
     DAL_Delay(1);
-    // ADS131M08_WriteReg(chip_idx, ADS131M08_REG_CFG, CFG_VALUE);
-    // DAL_Delay(1);
     for(uint8_t ch=0; ch<8; ch++)
     {
-        ADS131M08_WriteReg(chip_idx, CH_CFG_ADDR[ch], CH_CFG_VALUE);
+        ADS131M08_WriteReg(chip_idx, CH_CFG_ADDR[ch], CH_MUX_EXTERNAL);
         DAL_Delay(1);
     }
-    for(uint8_t ch=0; ch<8; ch++)
-    {
-        uint32_t ocal_val = ads131m08_ocal_values[chip_idx][ch];
-        // uint32_t gcal_val = ads131m08_gcal_values[chip_idx][ch];
-        
-        uint16_t ocal_msb = (ocal_val >> 8) & 0xFFFF;
-        uint16_t ocal_lsb = ocal_val & 0x00FF;
-        // uint16_t gcal_msb = (gcal_val >> 8) & 0xFFFF;
-        // uint16_t gcal_lsb = gcal_val & 0x00FF;
 
-        // 3. 依次写入两个寄存器
-        ADS131M08_WriteReg(chip_idx, OCAL_MSB_ADDR[ch], ocal_msb);
-        DAL_Delay(1);
-        ADS131M08_WriteReg(chip_idx, OCAL_LSB_ADDR[ch], ocal_lsb);
-        DAL_Delay(1);
-        // ADS131M08_WriteReg(chip_idx, GCAL_MSB_ADDR[ch], gcal_msb);
-        // DAL_Delay(1);
-        // ADS131M08_WriteReg(chip_idx, GCAL_LSB_ADDR[ch], gcal_lsb);
-        // DAL_Delay(1);
-    }
-    
-    // 【优化】初始化时就清空FIFO，避免在DMA采集中途调用阻塞函数
     ADS131M08_SPI_TransferFrame(chip_idx, NULL, NULL);
     ADS131M08_SPI_TransferFrame(chip_idx, NULL, NULL);
 }
@@ -385,4 +362,173 @@ void ADS131M08_Sync(void)
     ads_Delay_us(1);
     DAL_GPIO_WritePin(ADS131M08_SYNC_PORT, ADS131M08_SYNC_PIN, GPIO_PIN_SET);
     g_discard_count = 0;
+}
+
+/* ===================== 自动校准 ===================== */
+
+#define ADC_CAL_NUM_SAMPLES        16u
+#define ADC_CAL_DISCARD_FRAMES     4u
+#define ADC_CAL_DRDY_TIMEOUT_US    100000u
+#define ADC_CAL_POLL_INTERVAL_US   10u
+#define ADC_CAL_TEST_UV            5025.0f
+#define ADC_CAL_GCAL_NOMINAL       0x800000u
+
+static bool ADS131M08_WaitForDRDY(uint32_t timeout_us)
+{
+    uint32_t elapsed = 0;
+    bool was_high = (ADS131M08_DRDY_Read() != GPIO_PIN_RESET);
+
+    while (elapsed < timeout_us)
+    {
+        bool is_low = (ADS131M08_DRDY_Read() == GPIO_PIN_RESET);
+        if (was_high && is_low)
+            return true;
+        was_high = !is_low;
+        ads_Delay_us(ADC_CAL_POLL_INTERVAL_US);
+        elapsed += ADC_CAL_POLL_INTERVAL_US;
+    }
+    return false;
+}
+
+static void ADS131M08_ReadAllChipsSync(ADS131M08_Frame_t frames[ADS131M08_NUM_CHIPS])
+{
+    for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+    {
+        ADS131M08_SPI_TransferFrame(chip, NULL, &frames[chip]);
+    }
+}
+
+static void ADS131M08_WriteAllChMux(uint16_t mux)
+{
+    for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+    {
+        ADS131M08_Unlock(chip);
+        for (uint8_t ch = 0; ch < 8; ch++)
+        {
+            ADS131M08_WriteReg(chip, CH_CFG_ADDR[ch], mux);
+            DAL_Delay(1);
+        }
+    }
+}
+
+static void ADS131M08_WriteOCALSingle(uint8_t chip, uint8_t ch, uint32_t val)
+{
+    uint16_t msb = (val >> 8) & 0xFFFF;
+    uint16_t lsb = val & 0x00FF;
+    ADS131M08_WriteReg(chip, OCAL_MSB_ADDR[ch], msb);
+    DAL_Delay(1);
+    ADS131M08_WriteReg(chip, OCAL_LSB_ADDR[ch], lsb);
+    DAL_Delay(1);
+}
+
+static void ADS131M08_WriteGCALSingle(uint8_t chip, uint8_t ch, uint32_t val)
+{
+    uint16_t msb = (val >> 8) & 0xFFFF;
+    uint16_t lsb = val & 0x00FF;
+    ADS131M08_WriteReg(chip, GCAL_MSB_ADDR[ch], msb);
+    DAL_Delay(1);
+    ADS131M08_WriteReg(chip, GCAL_LSB_ADDR[ch], lsb);
+    DAL_Delay(1);
+}
+
+static bool ADS131M08_CollectAndAverage(uint32_t avg[ADS131M08_NUM_CHIPS][8])
+{
+    ADS131M08_Frame_t frames[ADS131M08_NUM_CHIPS];
+    int64_t acc[ADS131M08_NUM_CHIPS][8];
+    memset(acc, 0, sizeof(acc));
+
+    for (uint32_t d = 0; d < ADC_CAL_DISCARD_FRAMES; d++)
+    {
+        if (!ADS131M08_WaitForDRDY(ADC_CAL_DRDY_TIMEOUT_US))
+            return false;
+        ADS131M08_ReadAllChipsSync(frames);
+    }
+
+    for (uint32_t s = 0; s < ADC_CAL_NUM_SAMPLES; s++)
+    {
+        if (!ADS131M08_WaitForDRDY(ADC_CAL_DRDY_TIMEOUT_US))
+            return false;
+        ADS131M08_ReadAllChipsSync(frames);
+
+        for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+        {
+            for (uint8_t ch = 0; ch < 8; ch++)
+            {
+                uint32_t raw = (uint32_t)frames[chip].ch_data[ch];
+                int32_t val;
+                if (raw & ADS131M08_SIGN_BIT)
+                    val = (int32_t)(raw | ADS131M08_SIGN_EXT_MASK);
+                else
+                    val = (int32_t)raw;
+                acc[chip][ch] += val;
+            }
+        }
+    }
+
+    for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+    {
+        for (uint8_t ch = 0; ch < 8; ch++)
+        {
+            int64_t sum = acc[chip][ch];
+            avg[chip][ch] = (uint32_t)((sum + (int64_t)(ADC_CAL_NUM_SAMPLES / 2))
+                                       / (int64_t)ADC_CAL_NUM_SAMPLES);
+        }
+    }
+    return true;
+}
+
+void ADS131M08_AutoCalibrate(void)
+{
+    uint32_t avg[ADS131M08_NUM_CHIPS][8];
+    float expected_f = (ADC_CAL_TEST_UV / ADC_FULL_SCALE_UV) * 8388608.0f;
+    int32_t expected = (int32_t)(expected_f + 0.5f);
+
+    // Phase A: offset calibration (MUX=short)
+    ADS131M08_WriteAllChMux(CH_MUX_SHORTED);
+    ADS131M08_Sync();
+    if (ADS131M08_CollectAndAverage(avg))
+    {
+        for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+        {
+            ADS131M08_Unlock(chip);
+            for (uint8_t ch = 0; ch < 8; ch++)
+            {
+                uint32_t ocal = (uint32_t)((int32_t)(avg[chip][ch] & 0x00FFFFFFu));
+                ads131m08_ocal_values[chip][ch] = ocal;
+                ADS131M08_WriteOCALSingle(chip, ch, ocal);
+            }
+        }
+    }
+
+    // Phase B: gain calibration (MUX=test signal)
+    ADS131M08_WriteAllChMux(CH_MUX_POS_TEST);
+    ADS131M08_Sync();
+    if (ADS131M08_CollectAndAverage(avg))
+    {
+        for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+        {
+            ADS131M08_Unlock(chip);
+            for (uint8_t ch = 0; ch < 8; ch++)
+            {
+                int32_t measured = (int32_t)(avg[chip][ch] & 0x00FFFFFFu);
+                if (measured == 0) continue;
+
+                uint32_t gcal = (uint32_t)((float)expected / (float)measured
+                                           * (float)ADC_CAL_GCAL_NOMINAL + 0.5f);
+                if (gcal > 0x00FFFFFFu) gcal = 0x00FFFFFFu;
+
+                ads131m08_gcal_values[chip][ch] = gcal;
+                ADS131M08_WriteGCALSingle(chip, ch, gcal);
+            }
+        }
+    }
+
+    // Phase C: restore external input and flush FIFO
+    ADS131M08_WriteAllChMux(CH_MUX_EXTERNAL);
+    ADS131M08_Sync();
+    for (uint8_t chip = 0; chip < ADS131M08_NUM_CHIPS; chip++)
+    {
+        ADS131M08_SPI_TransferFrame(chip, NULL, NULL);
+        ADS131M08_SPI_TransferFrame(chip, NULL, NULL);
+    }
 }

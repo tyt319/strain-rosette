@@ -52,7 +52,11 @@ extern "C" {
 #define MODE_CONFIG_LEVEL_24BIT   (0x0100 | 0x0010 | 0x0002)
 #define GAIN_32                    0x5555
 #define CFG_VALUE           0x0700
-#define CH_CFG_VALUE        0x0002
+
+#define CH_MUX_EXTERNAL      0x0000u
+#define CH_MUX_SHORTED       0x0001u
+#define CH_MUX_POS_TEST      0x0002u
+#define CH_MUX_NEG_TEST      0x0003u
 
 /* ------------------- 数据帧结构体 ------------------- */
 typedef union
@@ -69,11 +73,13 @@ typedef union
 /* ------------------- 全局变量声明 (extern) ------------------- */
 extern ADS131M08_Frame_t adc_frames[ADS131M08_NUM_CHIPS];
 // 【关键】声明偏置数组，不分配内存
-extern const uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8];
-// 【关键】声明寄存器地址数组
+extern uint32_t ads131m08_ocal_values[ADS131M08_NUM_CHIPS][8];
+extern uint32_t ads131m08_gcal_values[ADS131M08_NUM_CHIPS][8];
 extern const uint8_t CH_CFG_ADDR[8];
 extern const uint8_t OCAL_MSB_ADDR[8];
 extern const uint8_t OCAL_LSB_ADDR[8];
+extern const uint8_t GCAL_MSB_ADDR[8];
+extern const uint8_t GCAL_LSB_ADDR[8];
 
 /* ------------------- 函数声明 ------------------- */
 void ads_Delay_us(uint32_t us);
@@ -91,6 +97,7 @@ void ADS131M08_DMA_TxRxCpltCallback(void);
 void ADS131M08_ProcessRound(void);
 void ADS131M08_Sync(void);
 void ADS131M08_DRDY_IRQHandler(void);
+void ADS131M08_AutoCalibrate(void);
 
 #ifdef __cplusplus
 }

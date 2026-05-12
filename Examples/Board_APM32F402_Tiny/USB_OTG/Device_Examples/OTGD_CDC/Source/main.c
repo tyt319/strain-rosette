@@ -51,6 +51,7 @@ int main(void)
     DAL_RCM_MCOConfig(RCM_MCO1, RCM_MCO1SOURCE_HSE, RCM_MCODIV_1);
     ADS131M08_InitAll();
     BridgeCal_Init();
+    ADS131M08_AutoCalibrate();
     ADS131M08_Sync();
     ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
 
