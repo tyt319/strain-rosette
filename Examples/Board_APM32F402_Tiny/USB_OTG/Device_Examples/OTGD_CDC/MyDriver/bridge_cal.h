@@ -41,11 +41,13 @@ extern "C" {
 /* ADC 码 ↔ μV 转换 */
 static inline int32_t BridgeCal_AdcToUV(int32_t adc_code)
 {
-    return (int32_t)((float)adc_code / BRCAL_ADC_FULLSCALE_F * ADC_FULL_SCALE_UV + 0.5f);
+    float v = (float)adc_code / BRCAL_ADC_FULLSCALE_F * ADC_FULL_SCALE_UV;
+    return (int32_t)(v + (v >= 0 ? 0.5f : -0.5f));
 }
 static inline int32_t BridgeCal_UVToAdc(int32_t uv)
 {
-    return (int32_t)((float)uv / ADC_FULL_SCALE_UV * BRCAL_ADC_FULLSCALE_F + 0.5f);
+    float v = (float)uv / ADC_FULL_SCALE_UV * BRCAL_ADC_FULLSCALE_F;
+    return (int32_t)(v + (v >= 0 ? 0.5f : -0.5f));
 }
 
 /* ===================== 二次多项式系数结构体 ===================== */

@@ -208,20 +208,37 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         return;
     }
 
-    if (cmd == CMD_TARE && len == 2)
+    if (cmd == CMD_TARE && len == 3)
     {
-        BridgeCal_TareAll(adc_frames);
-        for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
-            for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
-                BridgeCal_Enable(chip, ch);
-        sprintf(msg, "[TARE] All channels zeroed & enabled\r\n");
+        switch (buf[2])
+        {
+        case 0x00:
+            BridgeCal_TareAll(adc_frames);
+            sprintf(msg, "[TARE] Zero offsets set (enable unchanged)\r\n");
+            break;
+        case 0x01:
+            for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
+                for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                    BridgeCal_Enable(chip, ch);
+            sprintf(msg, "[TARE] All channels enabled\r\n");
+            break;
+        case 0x02:
+            for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
+                for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                    BridgeCal_Disable(chip, ch);
+            sprintf(msg, "[TARE] All channels disabled\r\n");
+            break;
+        default:
+            sprintf(msg, "[TARE] Unknown subcmd 0x%02X\r\n", buf[2]);
+            break;
+        }
         SendString(msg);
         return;
     }
 
-    if (cmd == CMD_ZERO_RD && len == 4)
+    if (cmd == CMD_ZERO_RD && len == 5)
     {
-        uint8_t chip = buf[2], ch = buf[3];
+        uint8_t chip = buf[3], ch = buf[4];
         if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
         {
             sprintf(msg, "[ZERO] Invalid chip=%d ch=%d\r\n", chip, ch);
@@ -235,11 +252,16 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         return;
     }
 
-    if (cmd == CMD_ZERO_WR && len == 7)
+    if (cmd == CMD_ZERO_WR && len == 8)
     {
-        uint8_t chip = buf[2], ch = buf[3];
-        int32_t offset_uv = (int32_t)((buf[4] << 16) | (buf[5] << 8) | buf[6]);
-        if (offset_uv & 0x800000) offset_uv |= 0xFF000000;
+        uint8_t chip  = buf[3], ch = buf[4];
+        uint8_t sign  = buf[5] >> 4;
+        uint8_t d3    = buf[5] & 0x0F;
+        uint8_t d2    = buf[6] >> 4;
+        uint8_t d1    = buf[6] & 0x0F;
+        uint8_t d0    = buf[7] >> 4;
+        int32_t offset_uv = (int32_t)(d3 * 10000 + d2 * 1000 + d1 * 100 + d0 * 10 + (buf[7] & 0x0F));
+        if (sign) offset_uv = -offset_uv;
         if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
         {
             sprintf(msg, "[ZERO] Invalid chip=%d ch=%d\r\n", chip, ch);
