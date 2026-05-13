@@ -39,7 +39,8 @@ typedef enum
 static void ParseCommand(uint8_t *buf, uint16_t len);
 static void ReadAllADCDataToBuffer(void);
 static void SendString(const char *str);
-static int32_t RawToDecimal(uint8_t *data);  // 数组3字节 → 十进制
+static int32_t RawToDecimal(uint8_t *data);
+static void AutoZeroCalibrate(void);
 
 /* ========== 异步读取完成标志及回调 ========== */
 static volatile bool adc_data_ready = false;
@@ -58,6 +59,8 @@ int main(void)
     BridgeCal_Init();
     BridgeCal_LoadPresets();
     ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
+    AutoZeroCalibrate();
+
     while (1)
     {
         ADS131M08_ProcessRound();
@@ -150,6 +153,45 @@ static void ReadAllADCDataToBuffer(void)
             adc_raw_data[chip][offset + 0] = (send_val >> 16) & 0xFF;
             adc_raw_data[chip][offset + 1] = (send_val >> 8) & 0xFF;
             adc_raw_data[chip][offset + 2] = send_val & 0xFF;
+        }
+    }
+}
+
+// ==============================
+// 上电自动零位校准 (取8帧均值)
+// ==============================
+#define ZERO_CAL_SAMPLES 8
+
+static void AutoZeroCalibrate(void)
+{
+    int64_t sum[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS] = {0};
+    uint8_t cnt = 0;
+    uint32_t timeout = 0;
+
+    while (cnt < ZERO_CAL_SAMPLES && timeout < 10000000)
+    {
+        ADS131M08_ProcessRound();
+        if (adc_data_ready)
+        {
+            adc_data_ready = false;
+            for (uint8_t c = 0; c < BRCAL_NUM_CHIPS; c++)
+                for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                    sum[c][ch] += adc_frames[c].ch_data[ch];
+            cnt++;
+        }
+        timeout++;
+    }
+
+    if (cnt > 0)
+    {
+        for (uint8_t c = 0; c < BRCAL_NUM_CHIPS; c++)
+        {
+            for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+            {
+                int32_t avg = (int32_t)(sum[c][ch] / cnt);
+                BridgeCal_SetZeroOffset(c, ch, avg);
+                BridgeCal_Enable(c, ch);
+            }
         }
     }
 }
