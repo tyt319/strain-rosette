@@ -107,6 +107,18 @@ static int32_t RawToDecimal(uint8_t *data)
     return val;
 }
 
+/* BCD 解码: 3字节 → 有符号μV (万位~个位, 首字节高半字为符号) */
+static int32_t BCD5_DecodeSigned(const uint8_t bcd[3])
+{
+    int32_t val = (int32_t)(bcd[0] & 0x0F) * 10000
+                + (int32_t)(bcd[1] >> 4)   * 1000
+                + (int32_t)(bcd[1] & 0x0F) * 100
+                + (int32_t)(bcd[2] >> 4)   * 10
+                + (int32_t)(bcd[2] & 0x0F);
+    if (bcd[0] & 0xF0) val = -val;
+    return val;
+}
+
 // ==============================
 // 数据存入数组（只算一次）
 // ==============================
@@ -126,7 +138,8 @@ static void ReadAllADCDataToBuffer(void)
             }
             else
             {
-                voltage_uv = BridgeCal_AdcToUV(adc_code);
+                int32_t x_q16 = (int32_t)(((int64_t)adc_code * BRCAL_ADC_TO_Q16_NUM) >> BRCAL_ADC_TO_Q16_SHIFT);
+                voltage_uv = (x_q16 + BRCAL_Q16_ONE / 2) >> 16;
             }
 
             int32_t abs_val = (voltage_uv >= 0) ? voltage_uv : -voltage_uv;
@@ -255,13 +268,7 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
     if (cmd == CMD_ZERO_WR && len == 8)
     {
         uint8_t chip  = buf[3], ch = buf[4];
-        uint8_t sign  = buf[5] >> 4;
-        uint8_t d3    = buf[5] & 0x0F;
-        uint8_t d2    = buf[6] >> 4;
-        uint8_t d1    = buf[6] & 0x0F;
-        uint8_t d0    = buf[7] >> 4;
-        int32_t offset_uv = (int32_t)(d3 * 10000 + d2 * 1000 + d1 * 100 + d0 * 10 + (buf[7] & 0x0F));
-        if (sign) offset_uv = -offset_uv;
+        int32_t offset_uv = BCD5_DecodeSigned(&buf[5]);
         if (chip >= BRCAL_NUM_CHIPS || ch >= BRCAL_NUM_CHANNELS)
         {
             sprintf(msg, "[ZERO] Invalid chip=%d ch=%d\r\n", chip, ch);
@@ -290,7 +297,7 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         BridgeCal_SetCoeffFixed(chip, ch, a0, a1, a2);
         sprintf(msg, "[COEFF] CHIP%d CH%d a0=%.6f a1=%.6f a2=%.6f\r\n",
                 chip, ch,
-                (double)a0 / 65536.0, (double)a1 / 65536.0, (double)a2 / 65536.0);
+                (double)a0 / (double)BRCAL_Q16_ONE, (double)a1 / (double)BRCAL_Q16_ONE, (double)a2 / (double)BRCAL_Q16_ONE);
         SendString(msg);
         return;
     }
@@ -307,9 +314,9 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         BridgeCalCoeffFixed_t *c = &g_brcal_coeff_fixed[chip][ch];
         sprintf(msg, "[COEFF] CHIP%d CH%d a0=%.6f a1=%.6f a2=%.6f en=%d\r\n",
                 chip, ch,
-                (double)c->a0_q16 / 65536.0,
-                (double)c->a1_q16 / 65536.0,
-                (double)c->a2_q16 / 65536.0,
+                (double)c->a0_q16 / (double)BRCAL_Q16_ONE,
+                (double)c->a1_q16 / (double)BRCAL_Q16_ONE,
+                (double)c->a2_q16 / (double)BRCAL_Q16_ONE,
                 c->enabled);
         SendString(msg);
         return;
