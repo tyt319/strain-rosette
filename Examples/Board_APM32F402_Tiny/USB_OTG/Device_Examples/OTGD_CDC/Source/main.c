@@ -217,28 +217,50 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
     if (cmd == CMD_READ_ADC_DATA && len == 3)
     {
         DAL_GPIO_TogglePin(GPIOC, GPIO_PIN_15);
-        SendString("=====================================\r\n");
+        uint8_t sub = buf[2];
 
-        for (uint8_t chip = 0; chip < ADC_TOTAL_CHIPS; chip++)
+        if (sub == 0x01)
         {
-            char line[256];
-            sprintf(line, "CHIP %d: ", chip);
-
-            for (uint8_t ch = 0; ch < ADC_CHANNELS_PER_CHIP; ch++)
+            /* 十六进制原码: 直接从 adc_frames 读取 */
+            SendString("=====================================\r\n");
+            for (uint8_t chip = 0; chip < ADC_TOTAL_CHIPS; chip++)
             {
-                uint8_t *data = &adc_raw_data[chip][ch * 3]; // 直接取数组
-                int32_t val = RawToDecimal(data);           // 转十进制
-
-                char temp[32];
-                sprintf(temp, "CH%d=%6d ", ch, val);
-                strcat(line, temp);
+                char line[256];
+                sprintf(line, "CHIP %d: ", chip);
+                for (uint8_t ch = 0; ch < ADC_CHANNELS_PER_CHIP; ch++)
+                {
+                    int32_t code = adc_frames[chip].ch_data[ch] - g_brcal_coeff_fixed[chip][ch].zero_offset;
+                    uint32_t hex_val = (uint32_t)code & 0xFFFFFF;
+                    char temp[32];
+                    sprintf(temp, "CH%d=%06X ", ch, (unsigned int)hex_val);
+                    strcat(line, temp);
+                }
+                strcat(line, "\r\n");
+                SendString(line);
             }
-
-            strcat(line, "\r\n");
-            SendString(line);
+            SendString("=====================================\r\n\r\n");
         }
-
-        SendString("=====================================\r\n\r\n");
+        else
+        {
+            /* 十进制 (默认): 保持原有格式 */
+            SendString("=====================================\r\n");
+            for (uint8_t chip = 0; chip < ADC_TOTAL_CHIPS; chip++)
+            {
+                char line[256];
+                sprintf(line, "CHIP %d: ", chip);
+                for (uint8_t ch = 0; ch < ADC_CHANNELS_PER_CHIP; ch++)
+                {
+                    uint8_t *data = &adc_raw_data[chip][ch * 3];
+                    int32_t val = RawToDecimal(data);
+                    char temp[32];
+                    sprintf(temp, "CH%d=%6d ", ch, val);
+                    strcat(line, temp);
+                }
+                strcat(line, "\r\n");
+                SendString(line);
+            }
+            SendString("=====================================\r\n\r\n");
+        }
         return;
     }
 
