@@ -59,7 +59,7 @@ int main(void)
     BridgeCal_Init();
     BridgeCal_LoadPresets();
     ADS131M08_ReadAllChips_Async(adc_frames, ADC_ReadCompleteCallback);
-    AutoZeroCalibrate();
+    // AutoZeroCalibrate();
 
     while (1)
     {
@@ -268,9 +268,33 @@ static void ParseCommand(uint8_t *buf, uint16_t len)
         switch (buf[2])
         {
         case 0x00:
-            BridgeCal_TareAll(adc_frames);
-            sprintf(msg, "[TARE] Zero offsets set (enable unchanged)\r\n");
+        {
+            #define TARE_SAMPLES 8
+            int64_t tare_sum[BRCAL_NUM_CHIPS][BRCAL_NUM_CHANNELS] = {0};
+            uint8_t tare_cnt = 0;
+            uint32_t tare_timeout = 0;
+            while (tare_cnt < TARE_SAMPLES && tare_timeout < 5000000)
+            {
+                ADS131M08_ProcessRound();
+                if (adc_data_ready)
+                {
+                    adc_data_ready = false;
+                    for (uint8_t c = 0; c < BRCAL_NUM_CHIPS; c++)
+                        for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                            tare_sum[c][ch] += adc_frames[c].ch_data[ch];
+                    tare_cnt++;
+                }
+                tare_timeout++;
+            }
+            if (tare_cnt > 0)
+            {
+                for (uint8_t c = 0; c < BRCAL_NUM_CHIPS; c++)
+                    for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
+                        BridgeCal_SetZeroOffset(c, ch, (int32_t)(tare_sum[c][ch] / tare_cnt));
+            }
+            sprintf(msg, "[TARE] Zero offsets set (%d samples avg)\r\n", tare_cnt);
             break;
+        }
         case 0x01:
             for (uint8_t chip = 0; chip < BRCAL_NUM_CHIPS; chip++)
                 for (uint8_t ch = 0; ch < BRCAL_NUM_CHANNELS; ch++)
